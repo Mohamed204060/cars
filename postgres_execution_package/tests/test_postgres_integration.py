@@ -97,11 +97,19 @@ class TestRealConcurrencyOnLivePostgres:
         لكن على اتصالين حقيقيين منفصلين بدل خيطَي بايثون على InMemory."""
         setup_conn = new_conn()
         cur = setup_conn.cursor()
-        cur.execute("INSERT INTO iam.users (email, status) VALUES (%s, 'active') RETURNING id",
-                    (f"user1_{uuid.uuid4().hex[:8]}@test.com",))
+        # iam.users intentionally has no email column after CR-005; login identifiers
+        # belong in iam.user_identities. Create two valid account rows first.
+        cur.execute(
+            "INSERT INTO iam.users (business_code, primary_role, account_type, status) "
+            "VALUES (%s, 'individual_buyer', 'individual', 'active') RETURNING id",
+            (f"USR-{uuid.uuid4().hex[:12]}",),
+        )
         user1_id = cur.fetchone()["id"]
-        cur.execute("INSERT INTO iam.users (email, status) VALUES (%s, 'active') RETURNING id",
-                    (f"user2_{uuid.uuid4().hex[:8]}@test.com",))
+        cur.execute(
+            "INSERT INTO iam.users (business_code, primary_role, account_type, status) "
+            "VALUES (%s, 'individual_buyer', 'individual', 'active') RETURNING id",
+            (f"USR-{uuid.uuid4().hex[:12]}",),
+        )
         user2_id = cur.fetchone()["id"]
         setup_conn.commit()
 
