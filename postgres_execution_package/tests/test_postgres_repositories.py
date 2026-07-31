@@ -86,26 +86,43 @@ class TestPostgresTrmRepository:
 
         repo = PostgresTrmRepository(conn)
         rater = str(uuid.uuid4())
-        target_ref = str(uuid.uuid4())
         pr_ref = str(uuid.uuid4())
         repo.insert_rating(Rating(id="", rated_by_user_ref_id=rater, target_type="seller",
-                                   target_ref_id=target_ref, source_purchase_request_ref_id=pr_ref, score=5))
+                                   target_ref_id=str(uuid.uuid4()), source_purchase_request_ref_id=pr_ref, score=5))
 
         with pytest.raises(DuplicateRatingError):
             repo.insert_rating(Rating(id="", rated_by_user_ref_id=rater, target_type="seller",
-                                       target_ref_id=target_ref, source_purchase_request_ref_id=pr_ref, score=3))
+                                       target_ref_id=str(uuid.uuid4()), source_purchase_request_ref_id=pr_ref, score=3))
 
 
 class TestPostgresAuthRepository:
-    """يستخدم PostgresAuthRepository الفعلية (svc_auth/src/auth_repository.py)."""
+    """
+    يستخدم PostgresAuthRepository الفعلية (svc_auth/src/auth_repository.py).
+    لا يستوجب أي Fixture خارجي: مزوِّد الهوية (iam.identity_providers) مزروع
+    فعليًا ضمن migration 015_cr005_phase1_identity_providers.sql نفسه (5 صفوف
+    ثابتة، منها email_password المُستخدَم هنا)؛ المستخدم الوحيد المطلوب
+    يُنشأ مباشرة عبر repo.create_user() المتوفرة أصلاً في المستودع.
+    """
 
     def test_insert_identity_via_real_repository_translates_unique_violation(self, conn):
         from auth_repository import PostgresAuthRepository
-        from auth_service import UserIdentity
+        from auth_service import DuplicateIdentityError, UserIdentity
 
         repo = PostgresAuthRepository(conn)
-        # يفترض وجود مستخدم ومزوِّد هوية مُدرَجَين مسبقًا في بيئة الاختبار (Fixtures منفصلة)
-        pytest.skip("يستوجب Fixtures لإنشاء مستخدم ومزوِّد هوية أولاً؛ جاهز للتشغيل بعد إضافتها في conftest.py")
+        user_id = repo.create_user()
+        external_id = f"user{uuid.uuid4()}@example.com"
+
+        first = repo.insert_identity(UserIdentity(
+            id="", user_id=user_id, provider_code="email_password",
+            external_identifier=external_id, is_verified=True,
+        ))
+        assert first.id is not None
+
+        with pytest.raises(DuplicateIdentityError):
+            repo.insert_identity(UserIdentity(
+                id="", user_id=user_id, provider_code="email_password",
+                external_identifier=external_id, is_verified=True,
+            ))
 
 
 class TestPostgresSchedulerRepository:
@@ -153,13 +170,7 @@ class TestPostgresInventoryItemRepository:
         from inventory_item_service import InventoryItem
 
         repo = PostgresInventoryItemRepository(conn)
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO str.stores (owner_user_ref_id, status) VALUES (%s, 'active') RETURNING id",
-                (str(uuid.uuid4()),),
-            )
-            store_id = str(cur.fetchone()["id"])
-        item = repo.insert_item(InventoryItem(id="", store_id=store_id, catalog_part_ref_id=str(uuid.uuid4()),
+        item = repo.insert_item(InventoryItem(id="", store_id=str(uuid.uuid4()), catalog_part_ref_id=str(uuid.uuid4()),
                                               condition_ref_id=str(uuid.uuid4()), pricing_mode="contact_for_price"))
         fetched = repo.get_item_by_id(item.id)
         assert fetched.pricing_mode == "contact_for_price"
@@ -173,10 +184,7 @@ class TestPostgresPctRepository:
         from pct_service import CatalogPart
 
         repo = PostgresPctRepository(conn)
-        with conn.cursor() as cur:
-            cur.execute("INSERT INTO pct.categories DEFAULT VALUES RETURNING id")
-            category_id = str(cur.fetchone()["id"])
-        part = repo.insert_part(CatalogPart(id="", category_id=category_id, status="proposed"))
+        part = repo.insert_part(CatalogPart(id="", category_id=str(uuid.uuid4()), status="proposed"))
         assert repo.is_part_approved(part.id) is False
         part.status = "approved"
         repo.update_part(part)
@@ -193,7 +201,7 @@ class TestPostgresVctRepository:
         repo = PostgresVctRepository(conn)
         manufacturer = repo.insert_manufacturer(Manufacturer(id="", status="approved"))
         assert manufacturer.id is not None
-        assert repo.is_trim_valid(str(uuid.uuid4())) is False
+        assert repo.is_trim_valid("nonexistent-trim-id") is False
 
 
 class TestPostgresCmpRepository:
