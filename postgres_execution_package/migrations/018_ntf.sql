@@ -101,8 +101,24 @@ CREATE TABLE ntf.template_versions (
 );
 COMMENT ON TABLE ntf.template_versions IS 'BR-NTF-006: جدول Append-Only بالكامل؛ لا UPDATE ولا DELETE على صف قائم أبدًا';
 CREATE INDEX idx_template_versions_template_id ON ntf.template_versions (template_id);
--- ملاحظة تصميمية: لا صلاحيات UPDATE أو DELETE يجب أن تُمنَح لهذا الجدول على مستوى قاعدة البيانات
--- (REVOKE UPDATE, DELETE ON ntf.template_versions) — يُطبَّق فعليًا عند التنفيذ الحي، غير مُفعَّل هنا.
+
+-- BR-NTF-006: enforce append-only behavior at the database layer.
+-- A trigger is used instead of relying only on REVOKE because migration/CI checks run
+-- under an owner/superuser account, which would otherwise bypass ordinary grants.
+CREATE OR REPLACE FUNCTION ntf.reject_template_version_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'ntf.template_versions is append-only; UPDATE and DELETE are forbidden'
+        USING ERRCODE = 'insufficient_privilege';
+END;
+$$;
+
+CREATE TRIGGER trg_template_versions_append_only
+BEFORE UPDATE OR DELETE ON ntf.template_versions
+FOR EACH ROW
+EXECUTE FUNCTION ntf.reject_template_version_mutation();
 
 CREATE TABLE ntf.channel_providers (
     code             VARCHAR(32) PRIMARY KEY,
