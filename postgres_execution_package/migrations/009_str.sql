@@ -23,7 +23,7 @@ CREATE TABLE str.inventory_items (
     store_id            UUID NOT NULL REFERENCES str.stores(id),
     catalog_part_ref_id UUID NOT NULL,                 -- إشارة مرجعية لـ pct.catalog_parts (REQ-STR-009)
     condition_ref_id    UUID NOT NULL,                 -- إشارة مرجعية لـ ref.ref_values (part_condition)
-    pricing_mode        VARCHAR(32) NOT NULL,          -- REQ-STR-012
+    pricing_mode        VARCHAR(16) NOT NULL,          -- REQ-STR-012
     price_amount        NUMERIC(12,2),
     price_currency      CHAR(3),
     quantity            INTEGER NOT NULL DEFAULT 0,
