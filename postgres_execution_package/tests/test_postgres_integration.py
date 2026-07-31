@@ -260,10 +260,28 @@ class TestTransactionsAndRollback:
 class TestNoHardDeletePolicy:
 
     def test_no_delete_privilege_on_template_versions(self, conn):
-        """يتحقق (بعد تطبيق REVOKE الموصى به في 018_ntf.sql) من عدم إمكانية حذف صف من الجدول الإلزامي Append-Only."""
+        """يتحقق فعليًا من منع حذف صف موجود من جدول الإصدارات Append-Only.
+
+        ملاحظة: الـ trigger صفّي (FOR EACH ROW)، لذلك DELETE على جدول فارغ لا يشغّله.
+        ينشئ الاختبار قالبًا وإصدارًا حقيقيًا أولًا، ثم يحاول حذف الإصدار.
+        """
         cur = conn.cursor()
+        template_code = f"TPL-{uuid.uuid4().hex[:12]}"
+        cur.execute(
+            "INSERT INTO ntf.templates (code, status, current_version_number) "
+            "VALUES (%s, 'active', 1) RETURNING id",
+            (template_code,),
+        )
+        template_id = cur.fetchone()["id"]
+        cur.execute(
+            "INSERT INTO ntf.template_versions (template_id, version_number, title, body) "
+            "VALUES (%s, 1, 'Test title', 'Test body') RETURNING id",
+            (template_id,),
+        )
+        version_id = cur.fetchone()["id"]
+
         with pytest.raises(psycopg2.errors.InsufficientPrivilege):
-            cur.execute("DELETE FROM ntf.template_versions WHERE true")
+            cur.execute("DELETE FROM ntf.template_versions WHERE id = %s", (version_id,))
 
     def test_archival_does_not_remove_row(self, conn):
         cur = conn.cursor()
