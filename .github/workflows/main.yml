@@ -112,17 +112,54 @@ jobs:
       - name: Verify execution package structure
         run: |
           set -euo pipefail
-          test -f "$PACKAGE_DIR/README.md"
-          test -f "$PACKAGE_DIR/requirements.txt"
-          test -f "$PACKAGE_DIR/scripts/setup_test_database.sh"
-          test -f "$PACKAGE_DIR/scripts/teardown_test_database.sh"
-          test -f "$PACKAGE_DIR/tools/schema_drift_check.py"
-          test -f "$PACKAGE_DIR/tests/conftest.py"
-          test -f "$PACKAGE_DIR/tests/test_postgres_repositories.py"
-          test -f "$PACKAGE_DIR/tests/test_postgres_integration.py"
-          migration_count="$(find "$PACKAGE_DIR/migrations" -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
-          echo "migration_count=$migration_count" | tee "$EVIDENCE_DIR/package-verification.txt"
-          test "$migration_count" -eq 22
+
+          required_files=(
+            "$PACKAGE_DIR/README.md"
+            "$PACKAGE_DIR/requirements.txt"
+            "$PACKAGE_DIR/scripts/setup_test_database.sh"
+            "$PACKAGE_DIR/scripts/teardown_test_database.sh"
+            "$PACKAGE_DIR/tools/schema_drift_check.py"
+            "$PACKAGE_DIR/tests/conftest.py"
+            "$PACKAGE_DIR/tests/test_postgres_repositories.py"
+            "$PACKAGE_DIR/tests/test_postgres_integration.py"
+          )
+
+          missing_files=0
+
+          for file in "${required_files[@]}"; do
+            if [ -f "$file" ]; then
+              echo "FOUND: $file"
+            else
+              echo "MISSING: $file" >&2
+              missing_files=$((missing_files + 1))
+            fi
+          done
+
+          migration_count="$(
+            find "$PACKAGE_DIR/migrations" \
+              -maxdepth 1 \
+              -type f \
+              -name '*.sql' |
+            wc -l |
+            tr -d ' '
+          )"
+
+          {
+            echo "migration_count=$migration_count"
+            echo "missing_files=$missing_files"
+          } | tee "$EVIDENCE_DIR/package-verification.txt"
+
+          if [ "$missing_files" -ne 0 ]; then
+            echo "Execution package has $missing_files missing required file(s)." >&2
+            exit 1
+          fi
+
+          if [ "$migration_count" -ne 22 ]; then
+            echo "Expected 22 migration files, found $migration_count." >&2
+            exit 1
+          fi
+
+          echo "Execution package structure is valid."
 
       - name: Create database and apply 22 migrations
         working-directory: postgres_execution_package
