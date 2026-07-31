@@ -9,6 +9,7 @@ inventory_item_repository.py — طبقة الوصول للبيانات لخدم
 
 from abc import ABC, abstractmethod
 from typing import Optional, List
+import uuid
 
 from inventory_item_service import InventoryItem
 
@@ -45,14 +46,15 @@ class PostgresInventoryItemRepository(InventoryItemRepository):
     def insert_item(self, item: InventoryItem) -> InventoryItem:
         query = """
             INSERT INTO str.inventory_items
-                (store_id, catalog_part_ref_id, condition_ref_id, pricing_mode,
+                (business_code, store_id, catalog_part_ref_id, condition_ref_id, pricing_mode,
                  price_amount, price_currency, quantity, status)
-            VALUES (%(store_id)s, %(catalog_part_ref_id)s, %(condition_ref_id)s, %(pricing_mode)s,
+            VALUES (%(business_code)s, %(store_id)s, %(catalog_part_ref_id)s, %(condition_ref_id)s, %(pricing_mode)s,
                     %(price_amount)s, %(price_currency)s, %(quantity)s, %(status)s)
             RETURNING id
         """
         with self._connection.cursor() as cur:
             cur.execute(query, {
+                "business_code": f"IT-{uuid.uuid4().hex[:29]}",
                 "store_id": item.store_id, "catalog_part_ref_id": item.catalog_part_ref_id,
                 "condition_ref_id": item.condition_ref_id, "pricing_mode": item.pricing_mode,
                 "price_amount": item.price_amount, "price_currency": item.price_currency,

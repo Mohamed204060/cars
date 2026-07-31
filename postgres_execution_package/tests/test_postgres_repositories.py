@@ -86,13 +86,14 @@ class TestPostgresTrmRepository:
 
         repo = PostgresTrmRepository(conn)
         rater = str(uuid.uuid4())
+        target_ref = str(uuid.uuid4())
         pr_ref = str(uuid.uuid4())
         repo.insert_rating(Rating(id="", rated_by_user_ref_id=rater, target_type="seller",
-                                   target_ref_id=str(uuid.uuid4()), source_purchase_request_ref_id=pr_ref, score=5))
+                                   target_ref_id=target_ref, source_purchase_request_ref_id=pr_ref, score=5))
 
         with pytest.raises(DuplicateRatingError):
             repo.insert_rating(Rating(id="", rated_by_user_ref_id=rater, target_type="seller",
-                                       target_ref_id=str(uuid.uuid4()), source_purchase_request_ref_id=pr_ref, score=3))
+                                       target_ref_id=target_ref, source_purchase_request_ref_id=pr_ref, score=3))
 
 
 class TestPostgresAuthRepository:
@@ -152,7 +153,13 @@ class TestPostgresInventoryItemRepository:
         from inventory_item_service import InventoryItem
 
         repo = PostgresInventoryItemRepository(conn)
-        item = repo.insert_item(InventoryItem(id="", store_id=str(uuid.uuid4()), catalog_part_ref_id=str(uuid.uuid4()),
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO str.stores (owner_user_ref_id, status) VALUES (%s, 'active') RETURNING id",
+                (str(uuid.uuid4()),),
+            )
+            store_id = str(cur.fetchone()["id"])
+        item = repo.insert_item(InventoryItem(id="", store_id=store_id, catalog_part_ref_id=str(uuid.uuid4()),
                                               condition_ref_id=str(uuid.uuid4()), pricing_mode="contact_for_price"))
         fetched = repo.get_item_by_id(item.id)
         assert fetched.pricing_mode == "contact_for_price"
@@ -166,7 +173,10 @@ class TestPostgresPctRepository:
         from pct_service import CatalogPart
 
         repo = PostgresPctRepository(conn)
-        part = repo.insert_part(CatalogPart(id="", category_id=str(uuid.uuid4()), status="proposed"))
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO pct.categories DEFAULT VALUES RETURNING id")
+            category_id = str(cur.fetchone()["id"])
+        part = repo.insert_part(CatalogPart(id="", category_id=category_id, status="proposed"))
         assert repo.is_part_approved(part.id) is False
         part.status = "approved"
         repo.update_part(part)
@@ -183,7 +193,7 @@ class TestPostgresVctRepository:
         repo = PostgresVctRepository(conn)
         manufacturer = repo.insert_manufacturer(Manufacturer(id="", status="approved"))
         assert manufacturer.id is not None
-        assert repo.is_trim_valid("nonexistent-trim-id") is False
+        assert repo.is_trim_valid(str(uuid.uuid4())) is False
 
 
 class TestPostgresCmpRepository:

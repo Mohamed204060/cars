@@ -8,6 +8,7 @@ order_repository.py — طبقة الوصول للبيانات لخدمة الط
 
 from abc import ABC, abstractmethod
 from typing import Optional, List
+import uuid
 
 from order_service import PurchaseRequest, Offer
 
@@ -51,12 +52,13 @@ class PostgresOrderRepository(OrderRepository):
         self._connection = connection
 
     def insert_purchase_request(self, pr: PurchaseRequest) -> PurchaseRequest:
+        business_code = f"PR-{uuid.uuid4().hex[:29]}"
         with self._connection.cursor() as cur:
             cur.execute(
-                "INSERT INTO pur.purchase_requests (buyer_user_ref_id, catalog_part_ref_id, trim_ref_id, status) "
-                "VALUES (%(buyer_user_ref_id)s, %(catalog_part_ref_id)s, %(trim_ref_id)s, %(status)s) RETURNING id",
-                {"buyer_user_ref_id": pr.buyer_user_ref_id, "catalog_part_ref_id": pr.catalog_part_ref_id,
-                 "trim_ref_id": pr.trim_ref_id, "status": pr.status},
+                "INSERT INTO pur.purchase_requests (business_code, buyer_user_ref_id, catalog_part_ref_id, trim_ref_id, status) "
+                "VALUES (%(business_code)s, %(buyer_user_ref_id)s, %(catalog_part_ref_id)s, %(trim_ref_id)s, %(status)s) RETURNING id",
+                {"business_code": business_code, "buyer_user_ref_id": pr.buyer_user_ref_id,
+                 "catalog_part_ref_id": pr.catalog_part_ref_id, "trim_ref_id": pr.trim_ref_id, "status": pr.status},
             )
             pr.id = cur.fetchone()["id"]
         return pr
@@ -88,13 +90,15 @@ class PostgresOrderRepository(OrderRepository):
 
     def insert_offer(self, offer: Offer) -> Offer:
         # يعتمد على uq_offers_one_active_per_seller (فهرس تفرّد جزئي لضمان عدم تكرار العرض النشط)
+        business_code = f"OF-{uuid.uuid4().hex[:29]}"
         with self._connection.cursor() as cur:
             cur.execute(
-                "INSERT INTO pur.offers (purchase_request_id, seller_store_ref_id, amount, currency, "
-                "provides_shipping, notes, status) VALUES (%(purchase_request_id)s, %(seller_store_ref_id)s, "
-                "%(amount)s, %(currency)s, %(provides_shipping)s, %(notes)s, %(status)s) RETURNING id",
-                {"purchase_request_id": offer.purchase_request_id, "seller_store_ref_id": offer.seller_store_ref_id,
-                 "amount": offer.amount, "currency": offer.currency, "provides_shipping": offer.provides_shipping,
+                "INSERT INTO pur.offers (business_code, purchase_request_id, seller_store_ref_id, amount, currency, "
+                "provides_shipping, notes, status) VALUES (%(business_code)s, %(purchase_request_id)s, "
+                "%(seller_store_ref_id)s, %(amount)s, %(currency)s, %(provides_shipping)s, %(notes)s, %(status)s) RETURNING id",
+                {"business_code": business_code, "purchase_request_id": offer.purchase_request_id,
+                 "seller_store_ref_id": offer.seller_store_ref_id, "amount": offer.amount,
+                 "currency": offer.currency, "provides_shipping": offer.provides_shipping,
                  "notes": offer.notes, "status": offer.status},
             )
             offer.id = cur.fetchone()["id"]
