@@ -1,0 +1,22 @@
+تعليمات الرفع المختصرة
+======================
+
+1) فك ضغط الملف في مجلد جديد وفارغ.
+2) افتح المجلد الناتج؛ يجب أن ترى مباشرة:
+   .github
+   postgres_execution_package
+   full_regression
+   docs
+   GITHUB_WORKFLOW_VISIBLE_COPY
+3) شغّل VERIFY_PACKAGE.bat. لا ترفع شيئًا إذا لم تظهر PACKAGE OK.
+4) ارفع محتويات المجلد إلى جذر مستودع GitHub.
+5) إذا لم يظهر مجلد .github بسبب كونه مخفيًا:
+   - GitHub > Add file > Create new file
+   - اسم الملف: .github/workflows/postgresql-validation.yml
+   - انسخ المحتوى من GITHUB_WORKFLOW_VISIBLE_COPY/postgresql-validation.yml
+6) قبل تشغيل Actions، افتح GitHub وتأكد من وجود هذه المسارات:
+   postgres_execution_package/tools/schema_drift_check.py
+   postgres_execution_package/tests/conftest.py
+   postgres_execution_package/tests/test_postgres_repositories.py
+   postgres_execution_package/tests/test_postgres_integration.py
+7) شغّل Actions > PostgreSQL Validation > Run workflow.
