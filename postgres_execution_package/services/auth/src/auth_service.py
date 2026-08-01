@@ -220,6 +220,36 @@ def add_identity_via_repository(
     return repository.insert_identity(new_identity)
 
 
+class InvalidPasswordCredentialsError(Exception):
+    """
+    تعديل CR-013 v2 — REQ-SEC-002/006: يُستخدَم لكل حالات فشل تسجيل الدخول
+    بكلمة مرور (هوية غير موجودة، كلمة مرور خاطئة، حساب موقوف/محظور، أو مزوّد
+    email_password معطَّل إداريًا)، برسالة واحدة موحَّدة دائمًا، عمدًا، حتى لا
+    يستطيع طرف خارجي التمييز بين "الحساب غير موجود" و"كلمة المرور خاطئة"
+    (يمنع هجمات تعداد الحسابات — Account Enumeration)."""
+
+
+def login_with_password_via_repository(repository, login_identifier: str, raw_password: str) -> UserIdentity:
+    """
+    نقطة الدخول الفعلية لتسجيل الدخول بكلمة مرور فقط (email_password)؛
+    لا تُنشئ حسابًا جديدًا أبدًا (بخلاف register_or_login_via_repository
+    المخصَّصة لمزوّدي OAuth الذين يتحققون من الهوية مسبقًا عبر الطرف الثالث
+    قبل وصولنا؛ كلمة المرور تحتاج تحققًا هنا نفسه، فلا يصح افتراض النجاح
+    وإنشاء حساب كما في التدفق الآخر).
+    """
+    try:
+        ensure_provider_enabled(repository.get_enabled_providers(), "email_password")
+    except ProviderDisabledError:
+        raise InvalidPasswordCredentialsError("بيانات الاعتماد غير صحيحة.")
+
+    identity = repository.find_identity_and_verify_password(
+        provider_code="email_password", external_identifier=login_identifier, raw_password=raw_password,
+    )
+    if identity is None:
+        raise InvalidPasswordCredentialsError("بيانات الاعتماد غير صحيحة.")
+    return identity
+
+
 def remove_identity_via_repository(repository, user_id: str, identity_id: str) -> None:
     existing_for_user = repository.get_identities_for_user(user_id)
     remove_identity(existing_for_user, user_id, identity_id)  # يتحقق فقط من قاعدة REQ-IAM-016 (يرمي استثناءً إن انتهك)

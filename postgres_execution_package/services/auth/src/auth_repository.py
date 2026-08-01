@@ -1,11 +1,18 @@
 """
 auth_repository.py — طبقة الوصول للبيانات لخدمة الهوية والمصادقة (Repository Pattern)
 المرجع: دليل حوكمة التنفيذ v1.3 (معيار Repository الإلزامي + سلسلة الاعتماد
-        API -> Service -> Repository)؛ Migration 015/016/017 (CR-005)
+        API -> Service -> Repository)؛ Migration 015/016/017 (CR-005)؛
+        CR-013 (v2) — إضافة دورة بيانات اعتماد كلمة المرور
 
 نفس بنية search_repository.py تمامًا: واجهة تجريدية (AuthRepository) لا تعرف
 عنها auth_service.py شيئًا سوى العقد، تنفيذ فعلي عبر PostgreSQL، وتنفيذ وهمي
 في الذاكرة للاختبار دون قاعدة بيانات حقيقية.
+
+مبدأ أمني جوهري (تعديل CR-013، البند 6): credential_secret_hash لا يظهر
+إطلاقًا على UserIdentity العامة التي تُعاد لأي طبقة استدعاء أعلى (لا في
+insert_identity، ولا في find_identity_and_verify_password أدناه) — يبقى
+محصورًا داخل هذا الملف فقط، فلا يمكن أن يتسرَّب صدفة إلى استجابة JSON أو سجل
+Log عبر مسار كود لاحق، بحكم البنية لا بحكم الحذر فقط.
 """
 
 from abc import ABC, abstractmethod
@@ -13,6 +20,7 @@ from typing import List, Optional
 import threading
 
 from auth_service import IdentityProvider, UserIdentity, DuplicateIdentityError
+from credential_service import InvalidCredentialHashFormatError, hash_password, verify_password
 
 
 class AuthRepository(ABC):
@@ -38,7 +46,20 @@ class AuthRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def insert_identity(self, identity: UserIdentity) -> UserIdentity:
+    def insert_identity(self, identity: UserIdentity, raw_password: Optional[str] = None) -> UserIdentity:
+        """raw_password: يُستخدَم فقط عند provider_code == 'email_password'؛
+        يُجزَّأ داخليًا هنا فقط (تعديل CR-013 v2)، ولا يُخزَّن ولا يُعاد خامًا أبدًا."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def find_identity_and_verify_password(
+        self, provider_code: str, external_identifier: str, raw_password: str
+    ) -> Optional[UserIdentity]:
+        """يُعيد UserIdentity فقط عند نجاح كل الشروط معًا: الهوية موجودة، بها
+        credential_secret_hash فعلي، الحساب المرتبط بحالة 'active'، وكلمة
+        المرور مطابقة فعليًا للتجزئة المخزَّنة. يُعيد None لأي سبب فشل — بلا
+        تمييز بين الأسباب في القيمة المُعادة (تعديل CR-013 v2، البند 5:
+        لا كشف عن وجود الحساب من عدمه)."""
         raise NotImplementedError
 
     @abstractmethod
@@ -126,7 +147,7 @@ class PostgresAuthRepository(AuthRepository):
             rows = cur.fetchall()
         return [self._row_to_identity(r) for r in rows]
 
-    def insert_identity(self, identity: UserIdentity) -> UserIdentity:
+    def insert_identity(self, identity: UserIdentity, raw_password: Optional[str] = None) -> UserIdentity:
         """
         سيناريو التزامن (توصية المالك): إذا حاول طلبان متزامنان ربط نفس
         (provider_type_id, external_identifier)، فإن قيد قاعدة البيانات
@@ -135,10 +156,17 @@ class PostgresAuthRepository(AuthRepository):
         فحص تطبيقي سابق قد يتعرَّض لحالة سباق (Race Condition)؛ المحاولة
         الثانية تفشل بخطأ انتهاك تفرّد (UniqueViolation) تُترجَم هنا صراحة
         إلى DuplicateIdentityError بدلاً من تسريب استثناء قاعدة بيانات خام.
+
+        raw_password (تعديل CR-013 v2): يُجزَّأ هنا فقط قبل أي استعلام؛ لا
+        يُخزَّن المتغيّر نفسه في أي سجل أو استثناء، ولا يُعاد على identity
+        المُعادة (UserIdentity لا تملك حقل تجزئة إطلاقًا).
         """
+        credential_secret_hash = hash_password(raw_password) if raw_password is not None else None
         query = """
-            INSERT INTO iam.user_identities (user_id, provider_type_id, external_identifier, verified_at, is_primary)
-            SELECT %(user_id)s, ip.id, %(external_identifier)s, (CASE WHEN %(is_verified)s THEN now() ELSE NULL END), %(is_primary)s
+            INSERT INTO iam.user_identities
+                (user_id, provider_type_id, external_identifier, credential_secret_hash, verified_at, is_primary)
+            SELECT %(user_id)s, ip.id, %(external_identifier)s, %(credential_secret_hash)s,
+                   (CASE WHEN %(is_verified)s THEN now() ELSE NULL END), %(is_primary)s
             FROM iam.identity_providers ip WHERE ip.code = %(provider_code)s
             RETURNING id
         """
@@ -148,6 +176,7 @@ class PostgresAuthRepository(AuthRepository):
                     cur.execute(query, {
                         "user_id": identity.user_id, "provider_code": identity.provider_code,
                         "external_identifier": identity.external_identifier,
+                        "credential_secret_hash": credential_secret_hash,
                         "is_verified": identity.is_verified, "is_primary": identity.is_primary,
                     })
                     new_id = cur.fetchone()["id"]
@@ -161,6 +190,44 @@ class PostgresAuthRepository(AuthRepository):
             raise
         identity.id = new_id
         return identity
+
+    def find_identity_and_verify_password(
+        self, provider_code: str, external_identifier: str, raw_password: str
+    ) -> Optional[UserIdentity]:
+        """
+        تعديل CR-013 v2 — REQ-SEC-002/006، وREQ الخاص بعدم كشف وجود الحساب:
+        استعلام واحد يجلب كل ما يلزم (التجزئة + حالة الحساب) معًا؛ credential_secret_hash
+        لا يغادر نطاق هذه الدالة أبدًا — لا يُعاد، لا يُسجَّل، لا يظهر في أي استثناء.
+        """
+        query = """
+            SELECT ui.id, ui.user_id, ip.code AS provider_code, ui.external_identifier,
+                   (ui.verified_at IS NOT NULL) AS is_verified, ui.is_primary, ui.last_authenticated_at,
+                   ui.credential_secret_hash, u.status AS account_status
+            FROM iam.user_identities ui
+            JOIN iam.identity_providers ip ON ip.id = ui.provider_type_id
+            JOIN iam.users u ON u.id = ui.user_id
+            WHERE ip.code = %(provider_code)s AND lower(ui.external_identifier) = lower(%(external_identifier)s)
+        """
+        with self._connection.cursor() as cur:
+            cur.execute(query, {"provider_code": provider_code, "external_identifier": external_identifier})
+            row = cur.fetchone()
+
+        if row is None or row["credential_secret_hash"] is None:
+            return None  # لا كشف: نفس القيمة المُعادة سواء الحساب غير موجود أو بلا كلمة مرور مسجَّلة أصلاً
+        if row["account_status"] != "active":
+            return None  # لا كشف: حساب موقوف/محظور يُعامَل كفشل تحقق عادي، لا رسالة مختلفة
+
+        try:
+            if not verify_password(raw_password, row["credential_secret_hash"]):
+                return None
+        except InvalidCredentialHashFormatError:
+            return None
+
+        return UserIdentity(
+            id=row["id"], user_id=row["user_id"], provider_code=row["provider_code"],
+            external_identifier=row["external_identifier"], is_verified=row["is_verified"],
+            is_primary=row["is_primary"], last_authenticated_at=row["last_authenticated_at"],
+        )
 
     def delete_identity(self, identity_id: str) -> None:
         with self._connection.cursor() as cur:
@@ -229,6 +296,15 @@ class InMemoryAuthRepository(AuthRepository):
         # قفل يحاكي ضمان التفرّد الذري لقيد قاعدة البيانات الحقيقي
         # (uq_user_identities_provider_identifier) عند تزامن طلبين
         self._lock = threading.Lock()
+        # تعديل CR-013 v2: تخزين منفصل تمامًا عن UserIdentity العامة، بنفس
+        # مبدأ عدم التسرّب المطبَّق في PostgresAuthRepository أعلاه.
+        self._credential_hashes = {}  # identity_id -> hash
+        self._user_status = {}  # user_id -> status ("active" افتراضيًا إن غاب)
+
+    def set_user_status(self, user_id: str, status: str) -> None:
+        """أداة اختبار فقط (لا مكافئ حرفي على مستوى العقد)؛ تحاكي عمود
+        iam.users.status لاختبار سيناريو الحساب الموقوف/المحظور في الذاكرة."""
+        self._user_status[user_id] = status
 
     def get_enabled_providers(self) -> List[IdentityProvider]:
         return [p for p in self._providers if p.is_enabled]
@@ -245,7 +321,7 @@ class InMemoryAuthRepository(AuthRepository):
     def get_identities_for_user(self, user_id):
         return [i for i in self._identities if i.user_id == user_id]
 
-    def insert_identity(self, identity: UserIdentity) -> UserIdentity:
+    def insert_identity(self, identity: UserIdentity, raw_password: Optional[str] = None) -> UserIdentity:
         """
         محاكاة سلوك قيد uq_user_identities_provider_identifier الذرّي عبر
         قفل: الفحص والإدراج معًا كوحدة واحدة غير قابلة للمقاطعة، تمامًا كما
@@ -261,10 +337,31 @@ class InMemoryAuthRepository(AuthRepository):
             identity.id = f"identity-{self._next_identity_seq}"
             self._next_identity_seq += 1
             self._identities.append(identity)
+            if raw_password is not None:
+                self._credential_hashes[identity.id] = hash_password(raw_password)
             return identity
+
+    def find_identity_and_verify_password(
+        self, provider_code: str, external_identifier: str, raw_password: str
+    ) -> Optional[UserIdentity]:
+        identity = self.find_identity_by_provider_and_identifier(provider_code, external_identifier)
+        if identity is None:
+            return None
+        stored_hash = self._credential_hashes.get(identity.id)
+        if stored_hash is None:
+            return None
+        if self._user_status.get(identity.user_id, "active") != "active":
+            return None
+        try:
+            if not verify_password(raw_password, stored_hash):
+                return None
+        except InvalidCredentialHashFormatError:
+            return None
+        return identity
 
     def delete_identity(self, identity_id: str) -> None:
         self._identities = [i for i in self._identities if i.id != identity_id]
+        self._credential_hashes.pop(identity_id, None)
 
     def create_user(self) -> str:
         new_id = f"user-{self._next_user_seq}"
