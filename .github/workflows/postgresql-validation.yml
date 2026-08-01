@@ -132,10 +132,10 @@ jobs:
             echo "missing_files=$missing_files"
           } | tee "$EVIDENCE_DIR/package-verification.txt"
           test "$missing_files" -eq 0
-          test "$migration_count" -eq 23
+          test "$migration_count" -eq 24
           echo "Execution package structure is valid."
 
-      - name: Create database and apply 23 migrations
+      - name: Create database and apply 24 migrations
         working-directory: postgres_execution_package
         run: |
           set -euo pipefail
@@ -170,6 +170,30 @@ jobs:
           python -m pytest tests/test_postgres_integration.py -vv \
             --junitxml="../$EVIDENCE_DIR/integration-tests.xml" \
             2>&1 | tee "../$EVIDENCE_DIR/integration-tests.log"
+
+      - name: Run auth session and credential unit tests (CR-013)
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_session_service.py tests/test_credential_service.py -vv \
+            --junitxml="../$EVIDENCE_DIR/auth-unit-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/auth-unit-tests.log"
+
+      - name: Run auth REST API tests (CR-013)
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_auth_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/auth-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/auth-api-tests.log"
+
+      - name: Run auth session and credential integration tests on live PostgreSQL (CR-013)
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_postgres_auth_sessions_integration.py tests/test_postgres_auth_credentials_integration.py -vv \
+            --junitxml="../$EVIDENCE_DIR/auth-integration-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/auth-integration-tests.log"
 
 
       - name: Run full regression (361 tests)
