@@ -1,0 +1,41 @@
+test_add_valid_attachment (test_message_extended_repository.TestAttachmentViaRepository.test_add_valid_attachment) ... ok
+test_invalid_attachment_rejected_not_persisted (test_message_extended_repository.TestAttachmentViaRepository.test_invalid_attachment_rejected_not_persisted) ... ok
+test_archive_for_one_user_does_not_archive_for_other (test_message_extended_repository.TestConversationSettingsViaRepository.test_archive_for_one_user_does_not_archive_for_other) ... ok
+test_mute_persists_independent_per_user (test_message_extended_repository.TestConversationSettingsViaRepository.test_mute_persists_independent_per_user) ... ok
+test_double_delivered_via_repository_raises (test_message_extended_repository.TestDeliveryTrackingViaRepository.test_double_delivered_via_repository_raises) ... ok
+test_mark_delivered_then_read_persists (test_message_extended_repository.TestDeliveryTrackingViaRepository.test_mark_delivered_then_read_persists) ... ok
+test_mark_read_without_tracking_raises (test_message_extended_repository.TestDeliveryTrackingViaRepository.test_mark_read_without_tracking_raises) ... ok
+test_go_online_then_offline (test_message_extended_repository.TestPresenceViaRepository.test_go_online_then_offline) ... ok
+test_disallowed_mime_type_rejected (test_message_extended_service.TestAttachmentValidation.test_disallowed_mime_type_rejected) ... ok
+test_executable_extension_rejected (test_message_extended_service.TestAttachmentValidation.test_executable_extension_rejected) ... ok
+test_mismatched_extension_disguising_executable_still_checked_by_mime (test_message_extended_service.TestAttachmentValidation.test_mismatched_extension_disguising_executable_still_checked_by_mime) ... ok
+test_oversized_file_rejected (test_message_extended_service.TestAttachmentValidation.test_oversized_file_rejected) ... ok
+test_shell_script_extension_rejected (test_message_extended_service.TestAttachmentValidation.test_shell_script_extension_rejected) ... ok
+test_valid_image_attachment_accepted (test_message_extended_service.TestAttachmentValidation.test_valid_image_attachment_accepted) ... ok
+test_zero_size_rejected (test_message_extended_service.TestAttachmentValidation.test_zero_size_rejected) ... ok
+test_archive_and_unarchive_does_not_affect_mute (test_message_extended_service.TestConversationUserSettings.test_archive_and_unarchive_does_not_affect_mute) ... ok
+test_mute_and_unmute (test_message_extended_service.TestConversationUserSettings.test_mute_and_unmute) ... ok
+test_cannot_double_mark_delivered (test_message_extended_service.TestDeliveryTracking.test_cannot_double_mark_delivered) ... ok
+test_cannot_double_mark_read (test_message_extended_service.TestDeliveryTracking.test_cannot_double_mark_read) ... ok
+test_cannot_read_before_delivered (test_message_extended_service.TestDeliveryTracking.test_cannot_read_before_delivered) ... ok
+test_mark_delivered_then_read (test_message_extended_service.TestDeliveryTracking.test_mark_delivered_then_read) ... ok
+test_empty_query_returns_empty (test_message_extended_service.TestMessageSearch.test_empty_query_returns_empty) ... ok
+test_no_match_returns_empty (test_message_extended_service.TestMessageSearch.test_no_match_returns_empty) ... ok
+test_search_case_and_whitespace_insensitive_query (test_message_extended_service.TestMessageSearch.test_search_case_and_whitespace_insensitive_query) ... ok
+test_search_finds_matching_messages (test_message_extended_service.TestMessageSearch.test_search_finds_matching_messages) ... ok
+test_mark_offline_records_last_seen (test_message_extended_service.TestPresence.test_mark_offline_records_last_seen) ... ok
+test_mark_online (test_message_extended_service.TestPresence.test_mark_online) ... ok
+test_create_forward_record (test_message_extended_service.TestReplyAndForward.test_create_forward_record) ... ok
+test_create_reply_link (test_message_extended_service.TestReplyAndForward.test_create_reply_link) ... ok
+test_self_reply_rejected (test_message_extended_service.TestReplyAndForward.test_self_reply_rejected) ... ok
+test_empty_reason_rejected (test_message_extended_service.TestReporting.test_empty_reason_rejected) ... ok
+test_invalid_target_type_rejected (test_message_extended_service.TestReporting.test_invalid_target_type_rejected) ... ok
+test_report_conversation (test_message_extended_service.TestReporting.test_report_conversation) ... ok
+test_report_message (test_message_extended_service.TestReporting.test_report_message) ... ok
+test_build_typing_signal_false (test_message_extended_service.TestTypingIndicator.test_build_typing_signal_false) ... ok
+test_build_typing_signal_true (test_message_extended_service.TestTypingIndicator.test_build_typing_signal_true) ... ok
+
+----------------------------------------------------------------------
+Ran 36 tests in 0.003s
+
+OK
