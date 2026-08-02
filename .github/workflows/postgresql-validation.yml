@@ -195,6 +195,22 @@ jobs:
             --junitxml="../$EVIDENCE_DIR/auth-integration-tests.xml" \
             2>&1 | tee "../$EVIDENCE_DIR/auth-integration-tests.log"
 
+      - name: Run PCT REST API unit tests
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_pct_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/pct-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/pct-api-tests.log"
+
+      - name: Run PCT REST API integration tests on live PostgreSQL
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_postgres_pct_api_integration.py -vv \
+            --junitxml="../$EVIDENCE_DIR/pct-integration-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/pct-integration-tests.log"
+
 
       - name: Run full regression (361 tests)
         run: |
