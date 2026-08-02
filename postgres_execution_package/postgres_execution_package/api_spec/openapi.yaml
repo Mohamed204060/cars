@@ -1,0 +1,885 @@
+openapi: 3.0.3
+info:
+  title: منصة قطع غيار السيارات - Auto Parts Marketplace API
+  version: "1.2.0"
+  description: >
+    مواصفة API تنفيذية، تغطي 15 عملية (Operations) عبر 14 مسارًا (Paths):
+    الواجهات التمثيلية الخمس الأصلية الموثّقة بالتفصيل في التصميم التفصيلي
+    (الحزمة 2)، بالإضافة إلى 5 عمليات خدمة Auth (اعتماد Contract Extension &
+    Implementation Plan): تسجيل خروج، عرض/إضافة/إزالة وسائل الهوية، وعرض
+    مزوّدي الهوية المفعَّلين — فتصبح عمليات Auth تحديدًا 6 عمليات شاملة
+    /auth/login الأصلية. وبالإضافة أيضًا إلى 5 عمليات خدمة PCT (الكتالوج):
+    اقتراح قطعة، عرضها، اعتمادها (مدير النظام فقط، REQ-PCT-002)، إضافة اسم
+    مترجَم، وتسجيل رقم OEM. كل عملية موسومة بامتداد x-traceability
+    يربطها بمعرّفات المتطلبات (REQ) وقرارات ADR/Change Request ذات الصلة.
+  x-governance: >
+    أي تغيير غير متوافق على أي عملية يستوجب إصدار نسخة عقد جديدة
+    (/api/v{n}) بدلاً من تعديل هذه النسخة مباشرة (DD الحزمة 2، القسم 2.1).
+    هذا الملف يُوسَّع تدريجيًا؛ لا يُحذَف أو يُعدَّل أي عملية قائمة دون
+    Change Request رسمي وفق دليل حوكمة التنفيذ. عمليات التسجيل/الدخول عبر
+    Google/Facebook/X (REQ-IAM-011) مؤجَّلة عمدًا إلى Increment لاحق ضمن
+    مرحلة Auth، بانتظار ADR يحسم تدفق التحقق الآمن؛ لا عملية OAuth موثَّقة
+    هنا حتى صدوره.
+
+servers:
+  - url: /api/v1
+    description: الإصدار الأول من عقود API (URI Versioning، DD الحزمة 2)
+
+security:
+  - sessionAuth: []
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: session_id
+      description: >
+        جلسة مستخدم صادرة عن وحدة IAM بعد تسجيل دخول ناجح (REQ-IAM-003)،
+        مدعومة بجدول iam.sessions (CR-013). تُسلَّم عبر Set-Cookie بخصائص
+        HttpOnly (لا يقرأها JavaScript) وSecure (HTTPS فقط) وSameSite=Lax
+        كحد أدنى. يُخزَّن على الخادم بصمة SHA-256 للتوكن فقط، لا التوكن
+        الخام (اتساقًا مع REQ-SEC-002). غير مطلوبة لعمليات الوصول العام مثل
+        تسجيل الدخول نفسه أو البحث أو عرض مزوّدي الهوية المفعَّلين.
+
+  parameters:
+    CorrelationIdHeader:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: >
+        معرّف تتبع اختياري يرفقه المستهلك؛ إن غاب يُنشئ النظام معرّفًا جديدًا
+        عند نقطة الدخول (SAD الحزمة 4، DD الحزمة 2 القسم 2.4).
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >
+        مفتاح عدم تكرار للعمليات الحساسة المعرَّضة لإعادة الإرسال
+        (DD الحزمة 2، القسم 2.2). مطلوب فعليًا (required) على مستوى العملية
+        عند الإنشاء، لا على مستوى الوثيقة العام.
+      schema:
+        type: string
+
+  schemas:
+    ErrorResponse:
+      type: object
+      description: نموذج الخطأ الموحّد المعتمد لجميع واجهات API (DD الحزمة 2، القسم 2.1/2.2)
+      required: [correlation_id, error_code, message]
+      properties:
+        correlation_id:
+          type: string
+          format: uuid
+        error_code:
+          type: string
+          example: "PART_NOT_APPROVED"
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              reason:
+                type: string
+
+    PaginationMeta:
+      type: object
+      description: بيانات التقسيم الموحّدة (DD الحزمة 2، القسم 2.3)
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total_items:
+          type: integer
+
+    LoginRequest:
+      type: object
+      required: [login_identifier, password]
+      properties:
+        login_identifier:
+          type: string
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      description: >
+        لا يتضمَّن التوكن الخام (session_id) في جسم الاستجابة عمدًا (تصحيح CR-013)؛
+        يُسلَّم حصرًا عبر Set-Cookie بخصائص HttpOnly وSecure وSameSite، لمنع
+        وصول أي كود JavaScript إليه ولو عبر قراءة جسم استجابة تسجيل الدخول نفسها.
+      properties:
+        primary_role:
+          type: string
+        account_status:
+          type: string
+
+    InventoryItemCreateRequest:
+      type: object
+      required: [catalog_part_ref_id, condition_ref_id, pricing_mode, quantity]
+      properties:
+        catalog_part_ref_id:
+          type: string
+          format: uuid
+        condition_ref_id:
+          type: string
+          format: uuid
+        pricing_mode:
+          type: string
+          enum: [fixed_price, contact_for_price]
+        price_amount:
+          type: number
+          format: double
+        price_currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        quantity:
+          type: integer
+          minimum: 0
+        photo_asset_refs:
+          type: array
+          items:
+            type: string
+
+    InventoryItemCreateResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        business_code:
+          type: string
+        status:
+          type: string
+
+    OfferSubmitRequest:
+      type: object
+      required: [amount, currency, provides_shipping]
+      properties:
+        amount:
+          type: number
+          format: double
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        provides_shipping:
+          type: boolean
+        notes:
+          type: string
+
+    OfferSubmitResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        business_code:
+          type: string
+        status:
+          type: string
+          enum: [submitted]
+
+    SearchResultItem:
+      type: object
+      properties:
+        inventory_item_id:
+          type: string
+          format: uuid
+        business_code:
+          type: string
+        part_name:
+          type: string
+        store_name:
+          type: string
+        image_url:
+          type: string
+        price_amount:
+          type: number
+          nullable: true
+        price_display_text:
+          type: string
+          description: نص بديل عند غياب السعر (REQ-STR-014)
+
+    SearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResultItem'
+        effective_country_code:
+          type: string
+          description: الدولة الفعّالة المستخدَمة في التصفية (REQ-SRC-006-C)
+        effective_country_source:
+          type: string
+          enum: [account, geolocation, ip, manual]
+          description: مصدر الدولة الفعّالة (مقترح توضيحي معتمَد، DD الحزمة 2 v1.4)
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    BulkImportPreviewResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        new_count:
+          type: integer
+        updated_count:
+          type: integer
+        rejected_count:
+          type: integer
+        rejected_rows:
+          type: array
+          items:
+            type: object
+            properties:
+              row_number:
+                type: integer
+              reason:
+                type: string
+
+    LogoutResponse:
+      type: object
+      description: تأكيد إلغاء الجلسة فورًا (REQ-SEC-005)
+      properties:
+        status:
+          type: string
+          enum: [logged_out]
+
+    IdentitySummary:
+      type: object
+      description: وصف مختصر لوسيلة هوية مرتبطة بحساب (REQ-IAM-016)
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider_code:
+          type: string
+        is_verified:
+          type: boolean
+        is_primary:
+          type: boolean
+        last_authenticated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    IdentityListResponse:
+      type: object
+      properties:
+        identities:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentitySummary'
+
+    IdentityAddRequest:
+      type: object
+      description: ربط وسيلة هوية إضافية بحساب المستخدم الحالي (REQ-IAM-015)
+      required: [provider_code, external_identifier]
+      properties:
+        provider_code:
+          type: string
+          example: "email_password"
+        external_identifier:
+          type: string
+        is_verified:
+          type: boolean
+          default: false
+
+    IdentityAddResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider_code:
+          type: string
+        is_verified:
+          type: boolean
+
+    ProviderSummary:
+      type: object
+      description: وسيلة هوية متاحة حاليًا للتسجيل/الدخول (REQ-IAM-013)
+      properties:
+        code:
+          type: string
+        display_name:
+          type: string
+        category:
+          type: string
+          enum: [password, otp, oauth]
+
+    ProviderListResponse:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderSummary'
+
+    CatalogPartCreateRequest:
+      type: object
+      required: [category_id]
+      properties:
+        category_id:
+          type: string
+          format: uuid
+
+    CatalogPartResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+        status: { type: string, enum: [proposed, approved, archived] }
+
+    LocalizedNameCreateRequest:
+      type: object
+      required: [name_value, name_kind]
+      properties:
+        name_value: { type: string }
+        name_kind: { type: string, enum: [canonical, local, english, synonym] }
+        locale: { type: string, nullable: true }
+
+    LocalizedNameResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name_value: { type: string }
+        name_kind: { type: string }
+        locale: { type: string, nullable: true }
+
+    OemNumberCreateRequest:
+      type: object
+      required: [manufacturer_ref_id, oem_number]
+      properties:
+        manufacturer_ref_id: { type: string, format: uuid }
+        oem_number: { type: string }
+
+    OemNumberResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        manufacturer_ref_id: { type: string, format: uuid }
+        oem_number: { type: string }
+
+paths:
+  /pct/parts:
+    post:
+      operationId: proposeCatalogPart
+      summary: تقديم طلب إضافة قطعة جديدة للكتالوج
+      x-traceability:
+        requirements: [REQ-PCT-001, REQ-PCT-007]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CatalogPartCreateRequest' }
+      responses:
+        '201':
+          description: أُنشئت القطعة بحالة proposed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogPartResponse' }
+        '401': { description: لا جلسة صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: category_id غير موجود (FK), content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /pct/parts/{partId}:
+    get:
+      operationId: getCatalogPart
+      summary: عرض تفاصيل قطعة كتالوج بمعرّفها
+      x-traceability:
+        requirements: [REQ-PCT-001, REQ-PCT-002]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: partId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: بيانات القطعة
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogPartResponse' }
+        '404': { description: غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /pct/parts/{partId}/approve:
+    post:
+      operationId: approveCatalogPart
+      summary: اعتماد قطعة كتالوج (proposed → approved)
+      x-traceability:
+        requirements: [REQ-PCT-002]
+        decisions: ["يستوجب تحديد آلية تفويض دور مدير النظام قبل التنفيذ — انظر ملاحظة الصلاحيات"]
+      security:
+        - sessionAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: partId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: أصبحت القطعة معتمَدة
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogPartResponse' }
+        '401': { description: لا جلسة صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: لا صلاحية اعتماد (مدير نظام فقط، REQ-PCT-002), content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: انتقال حالة غير مسموح (InvalidCatalogPartStatusError), content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /pct/parts/{partId}/names:
+    post:
+      operationId: addCatalogPartLocalizedName
+      summary: إضافة اسم (قياسي/محلي/إنجليزي/مرادف) لقطعة كتالوج
+      x-traceability:
+        requirements: [REQ-PCT-003]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: partId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LocalizedNameCreateRequest' }
+      responses:
+        '201':
+          description: أُضيف الاسم
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LocalizedNameResponse' }
+        '400': { description: قيمة اسم فارغة أو نوع اسم غير معروف, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: القطعة غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /pct/parts/{partId}/oem-numbers:
+    post:
+      operationId: addCatalogPartOemNumber
+      summary: تسجيل رقم OEM لقطعة كتالوج
+      x-traceability:
+        requirements: [REQ-PCT-004, REQ-PCT-005]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: partId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OemNumberCreateRequest' }
+      responses:
+        '201':
+          description: أُضيف رقم OEM
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OemNumberResponse' }
+        '404': { description: القطعة غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: 'رقم OEM مكرَّر لنفس الشركة المصنِّعة (REQ-PCT-005، DuplicateOemNumberError)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /auth/logout:
+    post:
+      operationId: authLogout
+      summary: تسجيل خروج المستخدم وإلغاء الجلسة فورًا
+      x-traceability:
+        requirements: [REQ-SEC-005, REQ-AUD-005]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      responses:
+        '200':
+          description: تم تسجيل الخروج وإلغاء الجلسة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+        '401':
+          description: لا جلسة نشطة أصلاً
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/identities:
+    get:
+      operationId: listMyIdentities
+      summary: عرض وسائل الهوية المرتبطة بحساب المستخدم الحالي
+      x-traceability:
+        requirements: [REQ-IAM-016]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      responses:
+        '200':
+          description: قائمة وسائل الهوية المرتبطة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityListResponse'
+        '401':
+          description: لا جلسة صالحة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      operationId: addMyIdentity
+      summary: ربط وسيلة هوية إضافية بالحساب الحالي
+      x-traceability:
+        requirements: [REQ-IAM-015, REQ-IAM-017]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityAddRequest'
+      responses:
+        '201':
+          description: تم ربط وسيلة الهوية بنجاح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityAddResponse'
+        '400':
+          description: وسيلة هوية معطَّلة إداريًا (ProviderDisabledError)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: لا جلسة صالحة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: الوسيلة مرتبطة بالفعل بحساب (نفس المستخدم أو آخر) — DuplicateIdentityError
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/identities/{identityId}:
+    delete:
+      operationId: removeMyIdentity
+      summary: إزالة وسيلة هوية من الحساب الحالي
+      x-traceability:
+        requirements: [REQ-IAM-016, REQ-IAM-017]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+        - name: identityId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: تمت إزالة وسيلة الهوية بنجاح
+        '401':
+          description: لا جلسة صالحة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: وسيلة الهوية غير موجودة لهذا الحساب
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: محاولة إزالة آخر وسيلة هوية متبقية — LastIdentityRemovalError (REQ-IAM-016)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/providers:
+    get:
+      operationId: listEnabledProviders
+      summary: عرض وسائل الهوية المتاحة حاليًا للتسجيل/الدخول
+      x-traceability:
+        requirements: [REQ-IAM-013]
+        decisions: []
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      responses:
+        '200':
+          description: قائمة الوسائل المفعَّلة إداريًا فقط (is_enabled=true)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderListResponse'
+
+  /auth/login:
+    post:
+      operationId: authLogin
+      summary: تسجيل دخول المستخدم
+      x-traceability:
+        requirements: [REQ-IAM-003, REQ-SEC-004, REQ-SEC-007]
+        decisions: []
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: نجاح تسجيل الدخول
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: >
+            بيانات اعتماد غير صحيحة (error_code=INVALID_CREDENTIALS) — رسالة
+            موحَّدة واحدة دائمًا لكل من: هوية غير موجودة، كلمة مرور خاطئة،
+            حساب موقوف/محظور، أو مزوّد email_password معطَّل إداريًا؛ عمدًا
+            بلا تمييز بينها لمنع تعداد الحسابات (تعديل CR-013 v2). تجاوز حد
+            المحاولات المتكررة (REQ-SEC-007) لم يُنفَّذ بعد ضمن هذا الـIncrement.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /inventory-items:
+    post:
+      operationId: createInventoryItem
+      summary: إنشاء عنصر مخزون بالإشارة لقطعة كتالوج معتمدة
+      x-traceability:
+        requirements: [REQ-STR-009, REQ-STR-012, REQ-STR-017, REQ-STR-020, REQ-STR-021]
+        decisions: [ADR-011]
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryItemCreateRequest'
+      responses:
+        '201':
+          description: تم إنشاء عنصر المخزون بنجاح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItemCreateResponse'
+        '400':
+          description: قطعة كتالوج غير معتمدة، أو سياسة تسعير غير صالحة، أو حالة قطعة غير معروفة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: المتجر غير نشط، أو غير مملوك للمستخدم الحالي
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /purchase-requests/{requestId}/offers:
+    post:
+      operationId: submitOffer
+      summary: تقديم عرض سعر بائع على طلب شراء قائم
+      x-traceability:
+        requirements: [REQ-PUR-011, REQ-PUR-016]
+        decisions: [CR-002]
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferSubmitRequest'
+      responses:
+        '201':
+          description: تم تقديم العرض بنجاح
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferSubmitResponse'
+        '409':
+          description: طلب الشراء مغلق أو منتهي الصلاحية، أو يوجد عرض نشط سابق لنفس البائع
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: البائع غير مؤهَّل لهذا الطلب
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /search/parts:
+    get:
+      operationId: searchParts
+      summary: البحث عن عناصر مخزون متوافقة مع معايير محددة
+      description: >
+        نقطة الوصول الوحيدة لخدمة البحث في كامل النظام؛ يُعاد استخدام العملية
+        نفسها بلا أي تفريع عبر أربعة سياقات واجهة مستخدم مختلفة (تصميم إعادة
+        استخدام، لا تغيير في المتطلبات أو منطق البحث): الصفحة الرئيسية (نموذج
+        بحث كامل)، صفحة نتائج البحث (نفس النموذج مع الاحتفاظ بالفلاتر
+        المختارة)، صفحة تفاصيل المنتج (نموذج مبسَّط أو "بحث مشابه" بتعبئة
+        مسبقة من جهة العميل لمعاملات كـtrim_ref_id وcondition_ref_id)، وصفحة
+        المتجر (نفس النموذج مع تمرير store_ref_id تلقائيًا). أي حقل مرجعي لم
+        يحدِّده المستهلك يعني عدم تطبيق ذلك الفلتر (REQ-SRC-010) — لا تُرسَل
+        قيمة "all" حرفية أبدًا.
+      x-traceability:
+        requirements: [REQ-SRC-001, REQ-SRC-003, REQ-SRC-004, REQ-SRC-006, REQ-SRC-006-C, REQ-SRC-006-D, REQ-SRC-006-E, REQ-SRC-007, REQ-SRC-007-A, REQ-SRC-010, REQ-SRC-011, REQ-SRC-013]
+        decisions: [CR-004, CR-006]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+        - name: q
+          in: query
+          schema: { type: string }
+          description: نص البحث الحر
+        - name: trim_ref_id
+          in: query
+          schema: { type: string, format: uuid }
+          description: غيابه يعني عدم التصفية بفئة سيارة محددة (REQ-SRC-010)، لا قيمة "الكل" مرسَلة
+        - name: price_filter
+          in: query
+          schema: { type: string, enum: [all, priced_only, unpriced_only] }
+          description: يبقى تصنيفًا ثلاثيًا كما هو (REQ-SRC-004)؛ لم يتأثر بـCR-006
+        - name: condition_ref_id
+          in: query
+          schema: { type: string, format: uuid }
+          description: غيابه يعني عدم التصفية بحالة قطعة محددة (REQ-SRC-010)
+        - name: verified_sellers_only
+          in: query
+          schema: { type: boolean }
+        - name: country_ref_id
+          in: query
+          required: false
+          description: >
+            اختياري؛ عند غيابه يُحدَّد تلقائيًا من جهة الخادم وفق ترتيب
+            الحساب ثم الموقع الجغرافي ثم IP (REQ-SRC-006-C)، أو دون تصفية
+            جغرافية إن تعذَّر الاكتشاف (REQ-SRC-006-E).
+          schema: { type: string, format: uuid }
+        - name: city_ref_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: store_ref_id
+          in: query
+          required: false
+          description: >
+            اختياري؛ يُستخدَم عند إعادة استخدام مكوّن البحث ضمن سياق صفحة
+            متجر محدد، لتقييد النتائج على عناصر ذلك المتجر فقط.
+          schema: { type: string, format: uuid }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, default: 20 }
+        - name: sort
+          in: query
+          schema: { type: string }
+          description: "بصيغة <حقل>:<asc|desc>؛ افتراضيًا وفق سياسة الترتيب المعتمدة؛ آخر قيمة يستخدمها العضو المسجَّل تُحفَظ وتُقتَرح تلقائيًا لاحقًا (REQ-SRC-013)"
+      responses:
+        '200':
+          description: نتائج البحث
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: معيار تصفية غير صالح (قيمة مرجعية غير موجودة)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reference-data/{type}/bulk-import/preview:
+    post:
+      operationId: previewBulkImport
+      summary: معاينة نتيجة استيراد جماعي لملف بيانات مرجعية قبل تأكيده
+      x-traceability:
+        requirements: [REQ-REF-004, REQ-REF-005, REQ-REF-006]
+        decisions: [CR-003]
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [country, city, language, fuel_type, transmission_type, engine_type, part_condition, subscription_type]
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: ملف .xlsx فقط
+      responses:
+        '200':
+          description: نتيجة المعاينة
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkImportPreviewResponse'
+        '403':
+          description: صلاحية غير كافية (يتطلب مدير النظام أو مفوَّضًا مماثلاً)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: صيغة ملف غير مدعومة أو نوع بيانات مرجعية غير مدعوم بالاستيراد الجماعي
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
