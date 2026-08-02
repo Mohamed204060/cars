@@ -58,7 +58,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -131,11 +131,20 @@ jobs:
             echo "migration_count=$migration_count"
             echo "missing_files=$missing_files"
           } | tee "$EVIDENCE_DIR/package-verification.txt"
-          test "$missing_files" -eq 0
-          test "$migration_count" -eq 23
+          if [ "$missing_files" -ne 0 ]; then
+            echo "ERROR: missing_files=$missing_files; expected 0" >&2
+            exit 1
+          fi
+
+          if [ "$migration_count" -ne 24 ]; then
+            echo "ERROR: migration_count=$migration_count; expected 24" >&2
+            exit 1
+          fi
+
+          echo "Execution package structure is valid."
           echo "Execution package structure is valid."
 
-      - name: Create database and apply 23 migrations
+      - name: Create database and apply 24 migrations
         working-directory: postgres_execution_package
         run: |
           set -euo pipefail
@@ -170,6 +179,46 @@ jobs:
           python -m pytest tests/test_postgres_integration.py -vv \
             --junitxml="../$EVIDENCE_DIR/integration-tests.xml" \
             2>&1 | tee "../$EVIDENCE_DIR/integration-tests.log"
+
+      - name: Run auth session and credential unit tests (CR-013)
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_session_service.py tests/test_credential_service.py -vv \
+            --junitxml="../$EVIDENCE_DIR/auth-unit-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/auth-unit-tests.log"
+
+      - name: Run auth REST API tests (CR-013)
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_auth_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/auth-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/auth-api-tests.log"
+
+      - name: Run auth session and credential integration tests on live PostgreSQL (CR-013)
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_postgres_auth_sessions_integration.py tests/test_postgres_auth_credentials_integration.py -vv \
+            --junitxml="../$EVIDENCE_DIR/auth-integration-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/auth-integration-tests.log"
+
+      - name: Run PCT REST API unit tests
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_pct_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/pct-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/pct-api-tests.log"
+
+      - name: Run PCT REST API integration tests on live PostgreSQL
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_postgres_pct_api_integration.py -vv \
+            --junitxml="../$EVIDENCE_DIR/pct-integration-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/pct-integration-tests.log"
 
 
       - name: Run full regression (361 tests)
@@ -211,12 +260,16 @@ jobs:
         if: always()
         working-directory: postgres_execution_package
         run: |
-          chmod +x scripts/teardown_test_database.sh
-          ./scripts/teardown_test_database.sh 2>&1 | tee "../$EVIDENCE_DIR/teardown.log" || true
+          if [ -f scripts/teardown_test_database.sh ]; then
+            chmod +x scripts/teardown_test_database.sh
+            ./scripts/teardown_test_database.sh
+          else
+            echo "Teardown script not found; skipping."
+          fi 2>&1 | tee "../$EVIDENCE_DIR/teardown.log" || true
 
       - name: Upload execution evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: postgresql-validation-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: execution-evidence/
