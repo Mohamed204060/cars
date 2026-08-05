@@ -291,6 +291,38 @@ jobs:
             --junitxml="../$EVIDENCE_DIR/inventory-integration-tests.xml" \
             2>&1 | tee "../$EVIDENCE_DIR/inventory-integration-tests.log"
 
+      - name: Run Orders REST API unit tests
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_order_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/orders-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/orders-api-tests.log"
+
+      - name: Run Messaging REST API unit tests
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_message_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/messaging-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/messaging-api-tests.log"
+
+      - name: Run Notifications REST API unit tests
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_ntf_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/notifications-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/notifications-api-tests.log"
+
+      - name: Run Orders+Messaging+Notifications integration tests on live PostgreSQL
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_postgres_orders_messaging_notifications_integration.py -vv \
+            --junitxml="../$EVIDENCE_DIR/orders-messaging-notifications-integration-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/orders-messaging-notifications-integration-tests.log"
+
 
       - name: Run full regression (361 tests)
         run: |
