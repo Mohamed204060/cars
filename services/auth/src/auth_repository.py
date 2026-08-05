@@ -82,6 +82,12 @@ class AuthRepository(ABC):
         هوية). يُعيد (user_id, UserIdentity)."""
         raise NotImplementedError
 
+    @abstractmethod
+    def get_user_role(self, user_id: str) -> Optional[str]:
+        """تعديل PCT Contract Extension — فحص صلاحية موضعي (لا RBAC كامل):
+        يُعيد iam.users.primary_role الفعلي، أو None إن لم يكن المستخدم موجودًا."""
+        raise NotImplementedError
+
 
 class PostgresAuthRepository(AuthRepository):
     """
@@ -239,6 +245,12 @@ class PostgresAuthRepository(AuthRepository):
                         "VALUES (replace(gen_random_uuid()::text, '-', ''), 'individual_buyer', 'individual') RETURNING id")
             return cur.fetchone()["id"]
 
+    def get_user_role(self, user_id: str) -> Optional[str]:
+        with self._connection.cursor() as cur:
+            cur.execute("SELECT primary_role FROM iam.users WHERE id = %(id)s", {"id": user_id})
+            row = cur.fetchone()
+        return row["primary_role"] if row else None
+
     def create_user_and_primary_identity(self, provider_code: str, external_identifier: str, is_verified: bool):
         """
         معاملة قاعدة بيانات واحدة تجمع الخطوتين: لا commit ضمني بين
@@ -300,11 +312,20 @@ class InMemoryAuthRepository(AuthRepository):
         # مبدأ عدم التسرّب المطبَّق في PostgresAuthRepository أعلاه.
         self._credential_hashes = {}  # identity_id -> hash
         self._user_status = {}  # user_id -> status ("active" افتراضيًا إن غاب)
+        self._user_roles = {}  # user_id -> primary_role ("individual_buyer" افتراضيًا إن غاب، كما في create_user الفعلي
 
     def set_user_status(self, user_id: str, status: str) -> None:
         """أداة اختبار فقط (لا مكافئ حرفي على مستوى العقد)؛ تحاكي عمود
         iam.users.status لاختبار سيناريو الحساب الموقوف/المحظور في الذاكرة."""
         self._user_status[user_id] = status
+
+    def set_user_role(self, user_id: str, role: str) -> None:
+        """أداة اختبار فقط؛ تحاكي iam.users.primary_role لاختبار فحص الصلاحية
+        الموضعي (PCT Contract Extension، approve)."""
+        self._user_roles[user_id] = role
+
+    def get_user_role(self, user_id: str) -> Optional[str]:
+        return self._user_roles.get(user_id, "individual_buyer")
 
     def get_enabled_providers(self) -> List[IdentityProvider]:
         return [p for p in self._providers if p.is_enabled]

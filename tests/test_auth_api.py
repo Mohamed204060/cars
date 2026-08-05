@@ -31,7 +31,12 @@ def app_and_client():
     app.state.auth_repository = InMemoryAuthRepository(providers=providers, identities=[])
     app.state.session_repository = InMemorySessionRepository()
 
-    client = TestClient(app)
+    # base_url على https إلزامي هنا: الجلسة تُصدَر بخاصية Secure=True (CR-013،
+    # لا نُعطِّلها في الاختبارات ولا في التطبيق)، وSecure Cookies لا تُرسَل من
+    # المتصفح/العميل إلا فوق HTTPS. الـTestClient الافتراضي على http://testserver
+    # كان يُنشئ الجلسة بنجاح لكن لا يُعيد إرسال الـCookie أبدًا في الطلبات
+    # التالية، فتظهر كل المسارات المحمية 401 رغم أن تسجيل الدخول نجح فعليًا.
+    client = TestClient(app, base_url="https://testserver")
     return app, client
 
 

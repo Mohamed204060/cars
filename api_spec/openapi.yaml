@@ -1,14 +1,28 @@
 openapi: 3.0.3
 info:
   title: منصة قطع غيار السيارات - Auto Parts Marketplace API
-  version: "1.1.0"
+  version: "1.6.0"
   description: >
-    مواصفة API تنفيذية، تغطي 10 عمليات (Operations) عبر 9 مسارات (Paths):
+    مواصفة API تنفيذية، تغطي 15 عملية (Operations) عبر 14 مسارًا (Paths):
     الواجهات التمثيلية الخمس الأصلية الموثّقة بالتفصيل في التصميم التفصيلي
-    (الحزمة 2)، بالإضافة إلى 5 عمليات خدمة Auth الجديدة (اعتماد Contract
-    Extension & Implementation Plan): تسجيل خروج، عرض/إضافة/إزالة وسائل
-    الهوية، وعرض مزوّدي الهوية المفعَّلين — فتصبح عمليات Auth تحديدًا 6
-    عمليات شاملة /auth/login الأصلية. كل عملية موسومة بامتداد x-traceability
+    (الحزمة 2)، بالإضافة إلى 5 عمليات خدمة Auth (اعتماد Contract Extension &
+    Implementation Plan): تسجيل خروج، عرض/إضافة/إزالة وسائل الهوية، وعرض
+    مزوّدي الهوية المفعَّلين — فتصبح عمليات Auth تحديدًا 6 عمليات شاملة
+    /auth/login الأصلية. وبالإضافة أيضًا إلى 5 عمليات خدمة PCT (الكتالوج):
+    اقتراح قطعة، عرضها، اعتمادها (مدير النظام فقط، REQ-PCT-002)، إضافة اسم
+    مترجَم، وتسجيل رقم OEM. وبالإضافة إلى 7 عمليات خدمة VCT (كتالوج
+    السيارات): اقتراح واعتماد شركة مصنّعة (مدير النظام فقط، REQ-VCT-002)،
+    عرضها، اقتراح موديل تحت شركة معتمَدة (REQ-VCT-003)، إضافة جيل، إضافة
+    فئة سيارة، وعرض فئة سيارة. وبالإضافة إلى 4 عمليات خدمة CMP (التوافق):
+    إنشاء سجل توافق بين قطعة معتمَدة وفئة صالحة (مدير النظام فقط،
+    REQ-CMP-001/002)، عرض سجل، عرض كل سجلات قطعة، وأرشفته (مدير النظام
+    فقط، REQ-CMP-003). وبالإضافة أيضًا إلى خدمتَي Store وInventory: إنشاء/
+    عرض متجر، تغيير حالته (مدير نظام أو مشرف، REQ-STR-004)، نقل ملكيته
+    (مدير نظام حصريًا، REQ-STR-006)؛ وعرض/تحديث كمية/تسعير/إخفاء/إظهار/
+    أرشفة عنصر مخزون (البائع المالك فقط، REQ-STR-019) إلى جانب /inventory-items
+    الأصلية (إنشاء العنصر، مع Idempotency-Key مطلوب). جميع مسارات هذا
+    الإصدار موحَّدة تحت البادئة /api/v1 اتساقًا مع DD الحزمة 2، القسم 2.1.
+    كل عملية موسومة بامتداد x-traceability
     يربطها بمعرّفات المتطلبات (REQ) وقرارات ADR/Change Request ذات الصلة.
   x-governance: >
     أي تغيير غير متوافق على أي عملية يستوجب إصدار نسخة عقد جديدة
@@ -327,8 +341,856 @@ components:
           items:
             $ref: '#/components/schemas/ProviderSummary'
 
+    CatalogPartCreateRequest:
+      type: object
+      required: [category_id]
+      properties:
+        category_id:
+          type: string
+          format: uuid
+
+    CatalogPartResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+        status: { type: string, enum: [proposed, approved, archived] }
+
+    LocalizedNameCreateRequest:
+      type: object
+      required: [name_value, name_kind]
+      properties:
+        name_value: { type: string }
+        name_kind: { type: string, enum: [canonical, local, english, synonym] }
+        locale: { type: string, nullable: true }
+
+    LocalizedNameResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name_value: { type: string }
+        name_kind: { type: string }
+        locale: { type: string, nullable: true }
+
+    OemNumberCreateRequest:
+      type: object
+      required: [manufacturer_ref_id, oem_number]
+      properties:
+        manufacturer_ref_id: { type: string, format: uuid }
+        oem_number: { type: string }
+
+    OemNumberResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        manufacturer_ref_id: { type: string, format: uuid }
+        oem_number: { type: string }
+
+    ManufacturerResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [proposed, approved, archived] }
+
+    ModelResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        manufacturer_id: { type: string, format: uuid }
+        status: { type: string, enum: [proposed, approved, archived] }
+
+    GenerationResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        model_id: { type: string, format: uuid }
+
+    TrimCreateRequest:
+      type: object
+      required: [fuel_type_ref_id, transmission_type_ref_id]
+      properties:
+        fuel_type_ref_id: { type: string, format: uuid }
+        transmission_type_ref_id: { type: string, format: uuid }
+
+    TrimResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        generation_id: { type: string, format: uuid }
+        fuel_type_ref_id: { type: string, format: uuid }
+        transmission_type_ref_id: { type: string, format: uuid }
+
+    CompatibilityRecordCreateRequest:
+      type: object
+      required: [catalog_part_ref_id, trim_ref_id]
+      properties:
+        catalog_part_ref_id: { type: string, format: uuid }
+        trim_ref_id: { type: string, format: uuid }
+
+    CompatibilityRecordResponse:
+      type: object
+      description: >
+        يقتصر على الحقول المخزَّنة فعليًا في 007_cmp.sql. حقول
+        fitment_type/compatibility_notes/source المذكورة في كود الخدمة كخطة
+        مستقبلية (Backlog) لا تقابلها أعمدة في قاعدة البيانات بعد، وتستوجب
+        Migration وقرارًا حوكميًا منفصلَين قبل إضافتها لهذا العقد.
+      properties:
+        id: { type: string, format: uuid }
+        catalog_part_ref_id: { type: string, format: uuid }
+        trim_ref_id: { type: string, format: uuid }
+        status: { type: string, enum: [active, archived] }
+
+    StoreCreateRequest:
+      type: object
+      properties:
+        country_ref_id: { type: string, format: uuid, nullable: true }
+        city_ref_id: { type: string, format: uuid, nullable: true }
+
+    StoreResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        owner_user_ref_id: { type: string, format: uuid }
+        status: { type: string, enum: [creating, active, suspended, archived] }
+        country_ref_id: { type: string, format: uuid, nullable: true }
+        city_ref_id: { type: string, format: uuid, nullable: true }
+
+    StoreStatusUpdateRequest:
+      type: object
+      required: [new_status]
+      properties:
+        new_status: { type: string, enum: [creating, active, suspended, archived] }
+
+    StoreTransferOwnershipRequest:
+      type: object
+      required: [new_owner_user_ref_id]
+      properties:
+        new_owner_user_ref_id: { type: string, format: uuid }
+
+    InventoryItemFullResponse:
+      type: object
+      description: العرض الكامل لعنصر المخزون (يختلف عن InventoryItemCreateResponse المختصَرة عند الإنشاء)
+      properties:
+        id: { type: string, format: uuid }
+        store_id: { type: string, format: uuid }
+        catalog_part_ref_id: { type: string, format: uuid }
+        condition_ref_id: { type: string, format: uuid }
+        pricing_mode: { type: string, enum: [fixed_price, contact_for_price] }
+        quantity: { type: integer }
+        price_amount: { type: number, nullable: true }
+        price_currency: { type: string, nullable: true }
+        status: { type: string, enum: [active, out_of_stock, hidden, archived] }
+
+    QuantityUpdateRequest:
+      type: object
+      required: [new_quantity]
+      properties:
+        new_quantity: { type: integer, minimum: 0 }
+
+    PricingUpdateRequest:
+      type: object
+      required: [pricing_mode]
+      properties:
+        pricing_mode: { type: string, enum: [fixed_price, contact_for_price] }
+        price_amount: { type: number, nullable: true }
+        price_currency: { type: string, nullable: true }
+
+    PurchaseRequestCreateRequest:
+      type: object
+      required: [catalog_part_ref_id, trim_ref_id]
+      properties:
+        catalog_part_ref_id: { type: string, format: uuid }
+        trim_ref_id: { type: string, format: uuid }
+
+    PurchaseRequestResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        business_code: { type: string, nullable: true }
+        buyer_user_ref_id: { type: string, format: uuid }
+        catalog_part_ref_id: { type: string, format: uuid }
+        trim_ref_id: { type: string, format: uuid }
+        status: { type: string, enum: [open, under_review, fulfilled, expired, cancelled] }
+
+    OfferResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        business_code: { type: string, nullable: true }
+        purchase_request_id: { type: string, format: uuid }
+        seller_store_ref_id: { type: string, format: uuid }
+        amount: { type: number }
+        currency: { type: string }
+        provides_shipping: { type: boolean }
+        notes: { type: string, nullable: true }
+        status: { type: string, enum: [submitted, accepted, rejected, withdrawn, expired] }
+
+    MessageSendRequest:
+      type: object
+      required: [context_type, context_ref_id, body]
+      properties:
+        context_type: { type: string, enum: [purchase_request, inventory_item] }
+        context_ref_id: { type: string, format: uuid }
+        body: { type: string, minLength: 1 }
+
+    MessageResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        sender_user_ref_id: { type: string, format: uuid }
+        body: { type: string }
+        is_deleted_by_sender: { type: boolean }
+        is_deleted_by_recipient: { type: boolean }
+
+    AttachmentCreateRequest:
+      type: object
+      required: [file_name, mime_type, size_bytes]
+      properties:
+        file_name: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+
+    AttachmentResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        message_id: { type: string, format: uuid }
+        file_name: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+
+    NotificationResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        recipient_id: { type: string, format: uuid }
+        is_read: { type: boolean }
+        is_archived_by_user: { type: boolean }
+
 paths:
-  /auth/logout:
+  /api/v1/purchase-requests:
+    post:
+      operationId: createPurchaseRequest
+      summary: إنشاء طلب شراء لقطعة كتالوج معتمَدة (REQ-PUR-001/002)
+      x-traceability: { requirements: [REQ-PUR-001, REQ-PUR-002], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PurchaseRequestCreateRequest' }
+      responses:
+        '201': { description: أُنشئ الطلب بحالة open, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseRequestResponse' } } } }
+        '409': { description: 'قطعة الكتالوج غير معتمدة', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/purchase-requests/{prId}:
+    get:
+      operationId: getPurchaseRequest
+      summary: عرض طلب شراء بمعرّفه
+      x-traceability: { requirements: [REQ-PUR-001], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: prId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: بيانات الطلب, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseRequestResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/purchase-requests/{prId}/cancel:
+    post:
+      operationId: cancelPurchaseRequest
+      summary: إلغاء طلب شراء (المشتري صاحب الطلب حصرًا، REQ-PUR-009)
+      x-traceability: { requirements: [REQ-PUR-009], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: prId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح ملغيًا, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseRequestResponse' } } } }
+        '403': { description: ليس صاحب الطلب, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: انتقال حالة غير مسموح, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/offers/{offerId}/accept:
+    post:
+      operationId: acceptOffer
+      summary: قبول عرض سعر واحد؛ رفض بقية العروض تلقائيًا (REQ-PUR-013/014)
+      x-traceability: { requirements: [REQ-PUR-013, REQ-PUR-014], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: offerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: 'أصبح الطلب fulfilled', content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseRequestResponse' } } } }
+        '403': { description: ليس صاحب الطلب, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: حالة عرض غير صالحة للقبول, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/offers/{offerId}/withdraw:
+    post:
+      operationId: withdrawOffer
+      summary: سحب عرض سعر قبل قبوله (البائع صاحب العرض حصرًا، REQ-PUR-018)
+      x-traceability: { requirements: [REQ-PUR-018], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: offerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح مسحوبًا, content: { application/json: { schema: { $ref: '#/components/schemas/OfferResponse' } } } }
+        '403': { description: ليس صاحب العرض, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: 'العرض مقبول بالفعل؛ لا يجوز سحبه', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/messages:
+    post:
+      operationId: sendMessage
+      summary: إرسال رسالة ضمن سياق محدَّد (REQ-COM-001/002)
+      x-traceability: { requirements: [REQ-COM-001, REQ-COM-002], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MessageSendRequest' }
+      responses:
+        '201': { description: أُرسلت الرسالة, content: { application/json: { schema: { $ref: '#/components/schemas/MessageResponse' } } } }
+        '400': { description: سياق غير معروف أو محتوى فارغ, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/conversations/{conversationId}/messages:
+    get:
+      operationId: listConversationMessages
+      summary: عرض رسائل محادثة (الظاهرة لصاحب الجلسة فقط، REQ-COM-007)
+      x-traceability:
+        requirements: [REQ-COM-002, REQ-COM-007]
+        decisions: ["لا إنفاذ عضوية طرفين صارم بعد؛ Backlog موثَّق في الكود"]
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: conversationId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: قائمة الرسائل الظاهرة
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/MessageResponse' } }
+
+  /api/v1/conversations/{conversationId}/messages/{messageId}:
+    delete:
+      operationId: deleteMessageForViewer
+      summary: حذف نسبي لرسالة من منظور صاحب الجلسة فقط (لا حذف فعلي، REQ-COM-007)
+      x-traceability: { requirements: [REQ-COM-007], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: conversationId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: حُذفت نسبيًا, content: { application/json: { schema: { $ref: '#/components/schemas/MessageResponse' } } } }
+        '404': { description: غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/messages/{messageId}/attachments:
+    post:
+      operationId: addMessageAttachment
+      summary: تسجيل بيانات مرفق وصفية لرسالة (لا رفع ملف فعلي، خارج النطاق)
+      x-traceability: { requirements: [], decisions: ["CR-007"] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttachmentCreateRequest' }
+      responses:
+        '201': { description: سُجِّل المرفق, content: { application/json: { schema: { $ref: '#/components/schemas/AttachmentResponse' } } } }
+        '400': { description: 'نوع/امتداد/حجم مرفوض أمنيًا', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/notifications/:
+    get:
+      operationId: listMyNotifications
+      summary: عرض إشعارات المستخدم الحالي (مركز الإشعارات فقط)
+      x-traceability:
+        requirements: []
+        decisions: ["إدارة الحملات (Campaign/Delivery/Template) مؤجَّلة عمدًا؛ راجع القسم الأخير"]
+      security: [{ sessionAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      responses:
+        '200':
+          description: قائمة الإشعارات
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/NotificationResponse' } }
+
+  /api/v1/notifications/{entryId}/read:
+    post:
+      operationId: markNotificationRead
+      summary: تعليم إشعار كمقروء (يخص المستخدم الحالي حصرًا)
+      x-traceability: { requirements: [], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: entryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح مقروءًا, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationResponse' } } } }
+        '404': { description: غير موجود أو لا يخص المستخدم الحالي, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/notifications/{entryId}/archive:
+    post:
+      operationId: archiveNotification
+      summary: أرشفة إشعار (يخص المستخدم الحالي حصرًا)
+      x-traceability: { requirements: [], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: entryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح مؤرشَفًا, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationResponse' } } } }
+        '404': { description: غير موجود أو لا يخص المستخدم الحالي, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/store/stores:
+    post:
+      operationId: createStore
+      summary: إنشاء متجر (بديل يدوي مؤقَّت حتى ربط الإنشاء التلقائي بحدث تسجيل البائع، REQ-STR-001)
+      x-traceability: { requirements: [REQ-STR-001], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreCreateRequest' }
+      responses:
+        '201': { description: أُنشئ المتجر بحالة active, content: { application/json: { schema: { $ref: '#/components/schemas/StoreResponse' } } } }
+
+  /api/v1/store/stores/{storeId}:
+    get:
+      operationId: getStore
+      summary: عرض متجر بمعرّفه
+      x-traceability: { requirements: [REQ-STR-001], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: بيانات المتجر, content: { application/json: { schema: { $ref: '#/components/schemas/StoreResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/store/stores/{storeId}/status:
+    post:
+      operationId: updateStoreStatus
+      summary: تغيير حالة المتجر (مدير النظام أو المشرف فقط)
+      x-traceability: { requirements: [REQ-STR-004], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreStatusUpdateRequest' }
+      responses:
+        '200': { description: تغيَّرت الحالة, content: { application/json: { schema: { $ref: '#/components/schemas/StoreResponse' } } } }
+        '403': { description: 'ليس مدير نظام أو مشرف (REQ-STR-004)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: انتقال حالة غير مسموح, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/store/stores/{storeId}/transfer-ownership:
+    post:
+      operationId: transferStoreOwnership
+      summary: نقل ملكية المتجر (مدير النظام حصريًا)
+      x-traceability: { requirements: [REQ-STR-006], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreTransferOwnershipRequest' }
+      responses:
+        '200': { description: تم نقل الملكية, content: { application/json: { schema: { $ref: '#/components/schemas/StoreResponse' } } } }
+        '403': { description: 'ليس مدير نظام (REQ-STR-006)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/inventory/items/{itemId}:
+    get:
+      operationId: getInventoryItem
+      summary: عرض عنصر مخزون كاملًا بمعرّفه
+      x-traceability: { requirements: [REQ-STR-009], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: بيانات العنصر, content: { application/json: { schema: { $ref: '#/components/schemas/InventoryItemFullResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/inventory/items/{itemId}/quantity:
+    patch:
+      operationId: updateInventoryItemQuantity
+      summary: تحديث كمية عنصر مخزون (البائع المالك فقط، REQ-STR-019)
+      x-traceability: { requirements: [REQ-STR-016, REQ-STR-017, REQ-STR-019], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuantityUpdateRequest' }
+      responses:
+        '200': { description: تحدَّثت الكمية (وربما الحالة تلقائيًا), content: { application/json: { schema: { $ref: '#/components/schemas/InventoryItemFullResponse' } } } }
+        '403': { description: 'ليس البائع المالك (REQ-STR-019)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: العنصر مؤرشَف، لا تعديل مسموح, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/inventory/items/{itemId}/pricing:
+    patch:
+      operationId: updateInventoryItemPricing
+      summary: تحديث سياسة تسعير عنصر مخزون (البائع المالك فقط، REQ-STR-019)
+      x-traceability: { requirements: [REQ-STR-012, REQ-STR-019], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PricingUpdateRequest' }
+      responses:
+        '200': { description: تحدَّثت السياسة, content: { application/json: { schema: { $ref: '#/components/schemas/InventoryItemFullResponse' } } } }
+        '400': { description: سياسة تسعير غير صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: ليس البائع المالك, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: العنصر مؤرشَف, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/inventory/items/{itemId}/hide:
+    post:
+      operationId: hideInventoryItem
+      summary: إخفاء عنصر مخزون (البائع المالك فقط)
+      x-traceability: { requirements: [REQ-STR-017, REQ-STR-019], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح مخفيًا, content: { application/json: { schema: { $ref: '#/components/schemas/InventoryItemFullResponse' } } } }
+        '403': { description: ليس البائع المالك, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: العنصر مؤرشَف, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/inventory/items/{itemId}/unhide:
+    post:
+      operationId: unhideInventoryItem
+      summary: إظهار عنصر مخزون مخفي (البائع المالك فقط)
+      x-traceability: { requirements: [REQ-STR-017, REQ-STR-019], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح ظاهرًا من جديد, content: { application/json: { schema: { $ref: '#/components/schemas/InventoryItemFullResponse' } } } }
+        '403': { description: ليس البائع المالك, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/inventory/items/{itemId}/archive:
+    post:
+      operationId: archiveInventoryItem
+      summary: أرشفة عنصر مخزون (Soft Delete، البائع المالك فقط)
+      x-traceability: { requirements: [REQ-STR-019], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح مؤرشَفًا, content: { application/json: { schema: { $ref: '#/components/schemas/InventoryItemFullResponse' } } } }
+        '403': { description: ليس البائع المالك, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: مؤرشَف بالفعل, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/cmp/records:
+    post:
+      operationId: createCompatibilityRecord
+      summary: إنشاء سجل توافق بين قطعة كتالوج معتمَدة وفئة سيارة صالحة (مدير النظام فقط)
+      x-traceability: { requirements: [REQ-CMP-001, REQ-CMP-002], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompatibilityRecordCreateRequest' }
+      responses:
+        '201': { description: أُنشئ السجل بحالة active, content: { application/json: { schema: { $ref: '#/components/schemas/CompatibilityRecordResponse' } } } }
+        '401': { description: لا جلسة صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: 'ليس مدير نظام (REQ-CMP-001)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: 'قطعة غير معتمَدة، أو فئة سيارة غير صالحة، أو زوج مكرَّر (REQ-CMP-002)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/cmp/records/{recordId}:
+    get:
+      operationId: getCompatibilityRecord
+      summary: عرض سجل توافق بمعرّفه
+      x-traceability: { requirements: [REQ-CMP-001], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: recordId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: بيانات السجل, content: { application/json: { schema: { $ref: '#/components/schemas/CompatibilityRecordResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/cmp/parts/{partId}/records:
+    get:
+      operationId: listCompatibilityRecordsForPart
+      summary: عرض كل سجلات التوافق لقطعة كتالوج معيّنة
+      x-traceability: { requirements: [REQ-CMP-001], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: partId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: قائمة سجلات التوافق (قد تكون فارغة)
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CompatibilityRecordResponse' } }
+
+  /api/v1/cmp/records/{recordId}/archive:
+    post:
+      operationId: archiveCompatibilityRecord
+      summary: أرشفة سجل توافق يدويًا (مدير النظام فقط)
+      x-traceability: { requirements: [REQ-CMP-003], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: recordId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح السجل مؤرشَفًا, content: { application/json: { schema: { $ref: '#/components/schemas/CompatibilityRecordResponse' } } } }
+        '403': { description: 'ليس مدير نظام (REQ-CMP-003)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: انتقال حالة غير مسموح (مؤرشَف بالفعل), content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/vct/manufacturers:
+    post:
+      operationId: proposeManufacturer
+      summary: اقتراح شركة مصنّعة جديدة
+      x-traceability: { requirements: [REQ-VCT-001], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      responses:
+        '201': { description: أُنشئت بحالة proposed, content: { application/json: { schema: { $ref: '#/components/schemas/ManufacturerResponse' } } } }
+        '401': { description: لا جلسة صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/vct/manufacturers/{manufacturerId}:
+    get:
+      operationId: getManufacturer
+      summary: عرض شركة مصنّعة بمعرّفها
+      x-traceability: { requirements: [REQ-VCT-001, REQ-VCT-002], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: manufacturerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: بيانات الشركة, content: { application/json: { schema: { $ref: '#/components/schemas/ManufacturerResponse' } } } }
+        '404': { description: غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/vct/manufacturers/{manufacturerId}/approve:
+    post:
+      operationId: approveManufacturer
+      summary: اعتماد شركة مصنّعة (مدير النظام فقط)
+      x-traceability: { requirements: [REQ-VCT-002], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: manufacturerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبحت معتمَدة, content: { application/json: { schema: { $ref: '#/components/schemas/ManufacturerResponse' } } } }
+        '401': { description: لا جلسة صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: 'ليس مدير نظام (super_admin/admin فقط)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: انتقال حالة غير مسموح, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/vct/manufacturers/{manufacturerId}/models:
+    post:
+      operationId: proposeModel
+      summary: اقتراح موديل تحت شركة مصنّعة معتمَدة
+      x-traceability: { requirements: [REQ-VCT-003], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: manufacturerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: أُنشئ الموديل, content: { application/json: { schema: { $ref: '#/components/schemas/ModelResponse' } } } }
+        '404': { description: الشركة المصنّعة غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: 'الشركة المصنّعة غير معتمَدة بعد (REQ-VCT-003)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/vct/models/{modelId}/generations:
+    post:
+      operationId: createGeneration
+      summary: إضافة جيل تحت موديل
+      x-traceability: { requirements: [REQ-VCT-004], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: modelId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: أُنشئ الجيل, content: { application/json: { schema: { $ref: '#/components/schemas/GenerationResponse' } } } }
+        '404': { description: الموديل غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/vct/generations/{generationId}/trims:
+    post:
+      operationId: createTrim
+      summary: إضافة فئة سيارة تحت جيل (نوع الوقود وناقل الحركة)
+      x-traceability: { requirements: [REQ-VCT-005], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: generationId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrimCreateRequest' }
+      responses:
+        '201': { description: أُنشئت الفئة, content: { application/json: { schema: { $ref: '#/components/schemas/TrimResponse' } } } }
+        '404': { description: الجيل غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/vct/trims/{trimId}:
+    get:
+      operationId: getTrim
+      summary: عرض فئة سيارة بمعرّفها (نقطة التحقق التي تستهلكها CMP)
+      x-traceability: { requirements: [REQ-VCT-005], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: trimId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: بيانات الفئة, content: { application/json: { schema: { $ref: '#/components/schemas/TrimResponse' } } } }
+        '404': { description: غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/pct/parts:
+    post:
+      operationId: proposeCatalogPart
+      summary: تقديم طلب إضافة قطعة جديدة للكتالوج
+      x-traceability:
+        requirements: [REQ-PCT-001, REQ-PCT-007]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CatalogPartCreateRequest' }
+      responses:
+        '201':
+          description: أُنشئت القطعة بحالة proposed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogPartResponse' }
+        '401': { description: لا جلسة صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: category_id غير موجود (FK), content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/pct/parts/{partId}:
+    get:
+      operationId: getCatalogPart
+      summary: عرض تفاصيل قطعة كتالوج بمعرّفها
+      x-traceability:
+        requirements: [REQ-PCT-001, REQ-PCT-002]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: partId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: بيانات القطعة
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogPartResponse' }
+        '404': { description: غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/pct/parts/{partId}/approve:
+    post:
+      operationId: approveCatalogPart
+      summary: اعتماد قطعة كتالوج (proposed → approved)
+      x-traceability:
+        requirements: [REQ-PCT-002]
+        decisions: ["يستوجب تحديد آلية تفويض دور مدير النظام قبل التنفيذ — انظر ملاحظة الصلاحيات"]
+      security:
+        - sessionAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: partId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: أصبحت القطعة معتمَدة
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogPartResponse' }
+        '401': { description: لا جلسة صالحة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: لا صلاحية اعتماد (مدير نظام فقط، REQ-PCT-002), content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: انتقال حالة غير مسموح (InvalidCatalogPartStatusError), content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/pct/parts/{partId}/names:
+    post:
+      operationId: addCatalogPartLocalizedName
+      summary: إضافة اسم (قياسي/محلي/إنجليزي/مرادف) لقطعة كتالوج
+      x-traceability:
+        requirements: [REQ-PCT-003]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: partId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LocalizedNameCreateRequest' }
+      responses:
+        '201':
+          description: أُضيف الاسم
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LocalizedNameResponse' }
+        '400': { description: قيمة اسم فارغة أو نوع اسم غير معروف, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: القطعة غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/pct/parts/{partId}/oem-numbers:
+    post:
+      operationId: addCatalogPartOemNumber
+      summary: تسجيل رقم OEM لقطعة كتالوج
+      x-traceability:
+        requirements: [REQ-PCT-004, REQ-PCT-005]
+        decisions: []
+      security:
+        - sessionAuth: []
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: partId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OemNumberCreateRequest' }
+      responses:
+        '201':
+          description: أُضيف رقم OEM
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OemNumberResponse' }
+        '404': { description: القطعة غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: 'رقم OEM مكرَّر لنفس الشركة المصنِّعة (REQ-PCT-005، DuplicateOemNumberError)', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/auth/logout:
     post:
       operationId: authLogout
       summary: تسجيل خروج المستخدم وإلغاء الجلسة فورًا
@@ -353,7 +1215,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /auth/identities:
+  /api/v1/auth/identities:
     get:
       operationId: listMyIdentities
       summary: عرض وسائل الهوية المرتبطة بحساب المستخدم الحالي
@@ -420,7 +1282,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /auth/identities/{identityId}:
+  /api/v1/auth/identities/{identityId}:
     delete:
       operationId: removeMyIdentity
       summary: إزالة وسيلة هوية من الحساب الحالي
@@ -459,7 +1321,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /auth/providers:
+  /api/v1/auth/providers:
     get:
       operationId: listEnabledProviders
       summary: عرض وسائل الهوية المتاحة حاليًا للتسجيل/الدخول
@@ -477,7 +1339,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProviderListResponse'
 
-  /auth/login:
+  /api/v1/auth/login:
     post:
       operationId: authLogin
       summary: تسجيل دخول المستخدم
@@ -512,7 +1374,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /inventory-items:
+  /api/v1/inventory-items:
     post:
       operationId: createInventoryItem
       summary: إنشاء عنصر مخزون بالإشارة لقطعة كتالوج معتمدة
@@ -521,7 +1383,15 @@ paths:
         decisions: [ADR-011]
       parameters:
         - $ref: '#/components/parameters/CorrelationIdHeader'
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            مطلوب (required) لهذه العملية تحديدًا (DD الحزمة 2، القسم 2.2)؛
+            إعادة إرسال نفس الطلب بنفس المفتاح تُعيد النتيجة الأصلية دون
+            إنشاء عنصر مخزون مكرَّر (Migration 025، sys.idempotency_keys).
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -536,25 +1406,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/InventoryItemCreateResponse'
         '400':
-          description: قطعة كتالوج غير معتمدة، أو سياسة تسعير غير صالحة، أو حالة قطعة غير معروفة
+          description: سياسة تسعير غير صالحة، أو كمية سالبة (error_code=INVALID_PRICING/INVALID_QUANTITY)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: المتجر غير نشط، أو غير مملوك للمستخدم الحالي
+          description: 'لا متجر نشط مملوك لهذا المستخدم (error_code=STORE_NOT_ACTIVE_OR_NOT_OWNED)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 'قطعة الكتالوج غير معتمدة (error_code=PART_NOT_APPROVED)'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /purchase-requests/{requestId}/offers:
+  /api/v1/purchase-requests/{requestId}/offers:
     post:
       operationId: submitOffer
       summary: تقديم عرض سعر بائع على طلب شراء قائم
       x-traceability:
         requirements: [REQ-PUR-011, REQ-PUR-016]
         decisions: [CR-002]
+      security: [{sessionAuth: []}]
       parameters:
         - name: requestId
           in: path
@@ -590,7 +1467,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /search/parts:
+  /api/v1/search/parts:
     get:
       operationId: searchParts
       summary: البحث عن عناصر مخزون متوافقة مع معايير محددة
@@ -671,7 +1548,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /reference-data/{type}/bulk-import/preview:
+  /api/v1/reference-data/{type}/bulk-import/preview:
     post:
       operationId: previewBulkImport
       summary: معاينة نتيجة استيراد جماعي لملف بيانات مرجعية قبل تأكيده
