@@ -227,6 +227,22 @@ jobs:
             --junitxml="../$EVIDENCE_DIR/vct-integration-tests.xml" \
             2>&1 | tee "../$EVIDENCE_DIR/vct-integration-tests.log"
 
+      - name: Run CMP REST API unit tests
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_cmp_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/cmp-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/cmp-api-tests.log"
+
+      - name: Run CMP REST API integration tests on live PostgreSQL
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_postgres_cmp_api_integration.py -vv \
+            --junitxml="../$EVIDENCE_DIR/cmp-integration-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/cmp-integration-tests.log"
+
 
       - name: Run full regression (361 tests)
         run: |
