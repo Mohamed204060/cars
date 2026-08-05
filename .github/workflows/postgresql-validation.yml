@@ -132,10 +132,10 @@ jobs:
             echo "missing_files=$missing_files"
           } | tee "$EVIDENCE_DIR/package-verification.txt"
           test "$missing_files" -eq 0
-          test "$migration_count" -eq 24
+          test "$migration_count" -eq 25
           echo "Execution package structure is valid."
 
-      - name: Create database and apply 24 migrations
+      - name: Create database and apply 25 migrations
         working-directory: postgres_execution_package
         run: |
           set -euo pipefail
@@ -258,6 +258,38 @@ jobs:
           python -m pytest tests/test_postgres_search_api_integration.py -vv \
             --junitxml="../$EVIDENCE_DIR/search-integration-tests.xml" \
             2>&1 | tee "../$EVIDENCE_DIR/search-integration-tests.log"
+
+      - name: Run Store REST API unit tests
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_store_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/store-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/store-api-tests.log"
+
+      - name: Run Store REST API integration tests on live PostgreSQL
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_postgres_store_api_integration.py -vv \
+            --junitxml="../$EVIDENCE_DIR/store-integration-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/store-integration-tests.log"
+
+      - name: Run Inventory Item REST API unit tests
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_inventory_item_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/inventory-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/inventory-api-tests.log"
+
+      - name: Run Inventory Item REST API integration tests on live PostgreSQL
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_postgres_inventory_item_api_integration.py -vv \
+            --junitxml="../$EVIDENCE_DIR/inventory-integration-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/inventory-integration-tests.log"
 
 
       - name: Run full regression (361 tests)
