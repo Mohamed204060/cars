@@ -243,6 +243,22 @@ jobs:
             --junitxml="../$EVIDENCE_DIR/cmp-integration-tests.xml" \
             2>&1 | tee "../$EVIDENCE_DIR/cmp-integration-tests.log"
 
+      - name: Run Search REST API unit tests
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_search_api.py -vv \
+            --junitxml="../$EVIDENCE_DIR/search-api-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/search-api-tests.log"
+
+      - name: Run Search REST API integration tests on live PostgreSQL
+        working-directory: postgres_execution_package
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_postgres_search_api_integration.py -vv \
+            --junitxml="../$EVIDENCE_DIR/search-integration-tests.xml" \
+            2>&1 | tee "../$EVIDENCE_DIR/search-integration-tests.log"
+
 
       - name: Run full regression (361 tests)
         run: |
