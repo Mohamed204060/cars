@@ -29,6 +29,7 @@ class PurchaseRequest:
     trim_ref_id: str          # SSOT: إشارة مرجعية فقط لخدمة VCT
     status: str = "open"
     has_received_offer: bool = False  # CR-002: يقيِّد تعديل الحقول بعد أول عرض
+    business_code: Optional[str] = None  # REQ-PUR-015: معرّف أعمال ظاهر؛ يُسنَد عبر Repository
 
 
 @dataclass
@@ -41,6 +42,7 @@ class Offer:
     provides_shipping: bool
     notes: Optional[str] = None
     status: str = "submitted"
+    business_code: Optional[str] = None  # REQ-PUR-015: معرّف أعمال ظاهر؛ يُسنَد عبر Repository
 
 
 class InvalidPurchaseRequestStatusError(Exception):
@@ -260,3 +262,12 @@ def withdraw_offer_via_repository(repository, offer_id: str) -> Offer:
         raise ValueError(f"لا يوجد عرض بالمعرّف: {offer_id}")
     withdraw_offer(offer)  # عملية على كائن واحد فقط؛ لا مشكلة هوية كائنية هنا (بخلاف accept_offer)
     return repository.update_offer(offer)
+
+
+def cancel_purchase_request_via_repository(repository, pr_id: str) -> PurchaseRequest:
+    """امتداد Orders/Messaging/Notifications Contract Extension: كان الغلاف مفقودًا."""
+    pr = repository.get_purchase_request_by_id(pr_id)
+    if pr is None:
+        raise ValueError(f"لا يوجد طلب شراء بالمعرّف: {pr_id}")
+    cancel_purchase_request(pr)
+    return repository.update_purchase_request(pr)

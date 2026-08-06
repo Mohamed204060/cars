@@ -341,3 +341,38 @@ def build_administrative_audit_event(action: str, actor_ref_id: str, campaign_id
         raise ValueError(f"نوع حدث غير معروف: {action}")
     return {"log_type": "administrative", "event_name": action, "actor_ref_id": actor_ref_id,
             "metadata": {"campaign_id": campaign_id, "correlation_id": correlation_id, "reason": reason}}
+
+
+# ---------------------------------------------------------------------------
+# امتداد Orders/Messaging/Notifications Contract Extension: أغلفة
+# *_via_repository لمركز الإشعارات (Notification Center) فقط — النطاق
+# المختار لهذه الدفعة لواجهة REST المُوجَّهة للمستخدم النهائي. إدارة الحملات
+# (Campaign/Delivery/Template/ChannelProvider) مؤجَّلة عمدًا (Backlog)؛ لم
+# تكن أي أغلفة *_via_repository موجودة لها أصلاً في هذا الملف قبل هذا
+# الامتداد، وتستوجب تصميم REST إداري منفصل أوسع بكثير من نطاق هذه الدفعة.
+# ---------------------------------------------------------------------------
+
+class NotificationNotFoundError(Exception):
+    """امتداد Contract Extension: إشعار غير موجود، أو لا يخص المستخدم الحالي."""
+
+
+def list_notifications_via_repository(repository, user_ref_id: str) -> List[NotificationCenterEntry]:
+    return repository.get_notification_center_entries_for_user(user_ref_id)
+
+
+def mark_notification_read_via_repository(repository, entry_id: str, user_ref_id: str) -> NotificationCenterEntry:
+    entries = repository.get_notification_center_entries_for_user(user_ref_id)
+    target = next((e for e in entries if e.id == entry_id), None)
+    if target is None:
+        raise NotificationNotFoundError(f"لا يوجد إشعار بالمعرّف: {entry_id} يخص هذا المستخدم.")
+    mark_notification_read(target)
+    return repository.update_notification_center_entry(target)
+
+
+def archive_notification_via_repository(repository, entry_id: str, user_ref_id: str) -> NotificationCenterEntry:
+    entries = repository.get_notification_center_entries_for_user(user_ref_id)
+    target = next((e for e in entries if e.id == entry_id), None)
+    if target is None:
+        raise NotificationNotFoundError(f"لا يوجد إشعار بالمعرّف: {entry_id} يخص هذا المستخدم.")
+    archive_notification_for_user(target)
+    return repository.update_notification_center_entry(target)

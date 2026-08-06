@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: منصة قطع غيار السيارات - Auto Parts Marketplace API
-  version: "1.5.0"
+  version: "1.6.0"
   description: >
     مواصفة API تنفيذية، تغطي 15 عملية (Operations) عبر 14 مسارًا (Paths):
     الواجهات التمثيلية الخمس الأصلية الموثّقة بالتفصيل في التصميم التفصيلي
@@ -495,7 +495,262 @@ components:
         price_amount: { type: number, nullable: true }
         price_currency: { type: string, nullable: true }
 
+    PurchaseRequestCreateRequest:
+      type: object
+      required: [catalog_part_ref_id, trim_ref_id]
+      properties:
+        catalog_part_ref_id: { type: string, format: uuid }
+        trim_ref_id: { type: string, format: uuid }
+
+    PurchaseRequestResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        business_code: { type: string, nullable: true }
+        buyer_user_ref_id: { type: string, format: uuid }
+        catalog_part_ref_id: { type: string, format: uuid }
+        trim_ref_id: { type: string, format: uuid }
+        status: { type: string, enum: [open, under_review, fulfilled, expired, cancelled] }
+
+    OfferResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        business_code: { type: string, nullable: true }
+        purchase_request_id: { type: string, format: uuid }
+        seller_store_ref_id: { type: string, format: uuid }
+        amount: { type: number }
+        currency: { type: string }
+        provides_shipping: { type: boolean }
+        notes: { type: string, nullable: true }
+        status: { type: string, enum: [submitted, accepted, rejected, withdrawn, expired] }
+
+    MessageSendRequest:
+      type: object
+      required: [context_type, context_ref_id, body]
+      properties:
+        context_type: { type: string, enum: [purchase_request, inventory_item] }
+        context_ref_id: { type: string, format: uuid }
+        body: { type: string, minLength: 1 }
+
+    MessageResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        sender_user_ref_id: { type: string, format: uuid }
+        body: { type: string }
+        is_deleted_by_sender: { type: boolean }
+        is_deleted_by_recipient: { type: boolean }
+
+    AttachmentCreateRequest:
+      type: object
+      required: [file_name, mime_type, size_bytes]
+      properties:
+        file_name: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+
+    AttachmentResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        message_id: { type: string, format: uuid }
+        file_name: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+
+    NotificationResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        recipient_id: { type: string, format: uuid }
+        is_read: { type: boolean }
+        is_archived_by_user: { type: boolean }
+
 paths:
+  /api/v1/purchase-requests:
+    post:
+      operationId: createPurchaseRequest
+      summary: إنشاء طلب شراء لقطعة كتالوج معتمَدة (REQ-PUR-001/002)
+      x-traceability: { requirements: [REQ-PUR-001, REQ-PUR-002], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PurchaseRequestCreateRequest' }
+      responses:
+        '201': { description: أُنشئ الطلب بحالة open, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseRequestResponse' } } } }
+        '409': { description: 'قطعة الكتالوج غير معتمدة', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/purchase-requests/{prId}:
+    get:
+      operationId: getPurchaseRequest
+      summary: عرض طلب شراء بمعرّفه
+      x-traceability: { requirements: [REQ-PUR-001], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: prId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: بيانات الطلب, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseRequestResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/purchase-requests/{prId}/cancel:
+    post:
+      operationId: cancelPurchaseRequest
+      summary: إلغاء طلب شراء (المشتري صاحب الطلب حصرًا، REQ-PUR-009)
+      x-traceability: { requirements: [REQ-PUR-009], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: prId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح ملغيًا, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseRequestResponse' } } } }
+        '403': { description: ليس صاحب الطلب, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: انتقال حالة غير مسموح, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/offers/{offerId}/accept:
+    post:
+      operationId: acceptOffer
+      summary: قبول عرض سعر واحد؛ رفض بقية العروض تلقائيًا (REQ-PUR-013/014)
+      x-traceability: { requirements: [REQ-PUR-013, REQ-PUR-014], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: offerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: 'أصبح الطلب fulfilled', content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseRequestResponse' } } } }
+        '403': { description: ليس صاحب الطلب, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: حالة عرض غير صالحة للقبول, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/offers/{offerId}/withdraw:
+    post:
+      operationId: withdrawOffer
+      summary: سحب عرض سعر قبل قبوله (البائع صاحب العرض حصرًا، REQ-PUR-018)
+      x-traceability: { requirements: [REQ-PUR-018], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: offerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح مسحوبًا, content: { application/json: { schema: { $ref: '#/components/schemas/OfferResponse' } } } }
+        '403': { description: ليس صاحب العرض, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: غير موجود, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: 'العرض مقبول بالفعل؛ لا يجوز سحبه', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/messages:
+    post:
+      operationId: sendMessage
+      summary: إرسال رسالة ضمن سياق محدَّد (REQ-COM-001/002)
+      x-traceability: { requirements: [REQ-COM-001, REQ-COM-002], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MessageSendRequest' }
+      responses:
+        '201': { description: أُرسلت الرسالة, content: { application/json: { schema: { $ref: '#/components/schemas/MessageResponse' } } } }
+        '400': { description: سياق غير معروف أو محتوى فارغ, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/conversations/{conversationId}/messages:
+    get:
+      operationId: listConversationMessages
+      summary: عرض رسائل محادثة (الظاهرة لصاحب الجلسة فقط، REQ-COM-007)
+      x-traceability:
+        requirements: [REQ-COM-002, REQ-COM-007]
+        decisions: ["لا إنفاذ عضوية طرفين صارم بعد؛ Backlog موثَّق في الكود"]
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: conversationId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: قائمة الرسائل الظاهرة
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/MessageResponse' } }
+
+  /api/v1/conversations/{conversationId}/messages/{messageId}:
+    delete:
+      operationId: deleteMessageForViewer
+      summary: حذف نسبي لرسالة من منظور صاحب الجلسة فقط (لا حذف فعلي، REQ-COM-007)
+      x-traceability: { requirements: [REQ-COM-007], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: conversationId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: حُذفت نسبيًا, content: { application/json: { schema: { $ref: '#/components/schemas/MessageResponse' } } } }
+        '404': { description: غير موجودة, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/messages/{messageId}/attachments:
+    post:
+      operationId: addMessageAttachment
+      summary: تسجيل بيانات مرفق وصفية لرسالة (لا رفع ملف فعلي، خارج النطاق)
+      x-traceability: { requirements: [], decisions: ["CR-007"] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttachmentCreateRequest' }
+      responses:
+        '201': { description: سُجِّل المرفق, content: { application/json: { schema: { $ref: '#/components/schemas/AttachmentResponse' } } } }
+        '400': { description: 'نوع/امتداد/حجم مرفوض أمنيًا', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/notifications/:
+    get:
+      operationId: listMyNotifications
+      summary: عرض إشعارات المستخدم الحالي (مركز الإشعارات فقط)
+      x-traceability:
+        requirements: []
+        decisions: ["إدارة الحملات (Campaign/Delivery/Template) مؤجَّلة عمدًا؛ راجع القسم الأخير"]
+      security: [{ sessionAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CorrelationIdHeader' }]
+      responses:
+        '200':
+          description: قائمة الإشعارات
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/NotificationResponse' } }
+
+  /api/v1/notifications/{entryId}/read:
+    post:
+      operationId: markNotificationRead
+      summary: تعليم إشعار كمقروء (يخص المستخدم الحالي حصرًا)
+      x-traceability: { requirements: [], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: entryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح مقروءًا, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationResponse' } } } }
+        '404': { description: غير موجود أو لا يخص المستخدم الحالي, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /api/v1/notifications/{entryId}/archive:
+    post:
+      operationId: archiveNotification
+      summary: أرشفة إشعار (يخص المستخدم الحالي حصرًا)
+      x-traceability: { requirements: [], decisions: [] }
+      security: [{ sessionAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CorrelationIdHeader' }
+        - { name: entryId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: أصبح مؤرشَفًا, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationResponse' } } } }
+        '404': { description: غير موجود أو لا يخص المستخدم الحالي, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
   /api/v1/store/stores:
     post:
       operationId: createStore
@@ -1176,6 +1431,7 @@ paths:
       x-traceability:
         requirements: [REQ-PUR-011, REQ-PUR-016]
         decisions: [CR-002]
+      security: [{sessionAuth: []}]
       parameters:
         - name: requestId
           in: path

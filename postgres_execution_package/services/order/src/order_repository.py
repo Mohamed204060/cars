@@ -56,17 +56,19 @@ class PostgresOrderRepository(OrderRepository):
         with self._connection.cursor() as cur:
             cur.execute(
                 "INSERT INTO pur.purchase_requests (business_code, buyer_user_ref_id, catalog_part_ref_id, trim_ref_id, status) "
-                "VALUES (%(business_code)s, %(buyer_user_ref_id)s, %(catalog_part_ref_id)s, %(trim_ref_id)s, %(status)s) RETURNING id",
+                "VALUES (%(business_code)s, %(buyer_user_ref_id)s, %(catalog_part_ref_id)s, %(trim_ref_id)s, %(status)s) RETURNING id, business_code",
                 {"business_code": business_code, "buyer_user_ref_id": pr.buyer_user_ref_id,
                  "catalog_part_ref_id": pr.catalog_part_ref_id, "trim_ref_id": pr.trim_ref_id, "status": pr.status},
             )
-            pr.id = cur.fetchone()["id"]
+            row = cur.fetchone()
+            pr.id = row["id"]
+            pr.business_code = row["business_code"]
         return pr
 
     def get_purchase_request_by_id(self, pr_id: str) -> Optional[PurchaseRequest]:
         with self._connection.cursor() as cur:
             cur.execute(
-                "SELECT id, buyer_user_ref_id, catalog_part_ref_id, trim_ref_id, status "
+                "SELECT id, buyer_user_ref_id, catalog_part_ref_id, trim_ref_id, status, business_code "
                 "FROM pur.purchase_requests WHERE id = %(id)s",
                 {"id": pr_id},
             )
@@ -75,7 +77,7 @@ class PostgresOrderRepository(OrderRepository):
             return None
         return PurchaseRequest(id=row["id"], buyer_user_ref_id=row["buyer_user_ref_id"],
                                 catalog_part_ref_id=row["catalog_part_ref_id"], trim_ref_id=row["trim_ref_id"],
-                                status=row["status"])
+                                status=row["status"], business_code=row["business_code"])
 
     def update_purchase_request(self, pr: PurchaseRequest) -> PurchaseRequest:
         with self._connection:
@@ -95,13 +97,15 @@ class PostgresOrderRepository(OrderRepository):
             cur.execute(
                 "INSERT INTO pur.offers (business_code, purchase_request_id, seller_store_ref_id, amount, currency, "
                 "provides_shipping, notes, status) VALUES (%(business_code)s, %(purchase_request_id)s, "
-                "%(seller_store_ref_id)s, %(amount)s, %(currency)s, %(provides_shipping)s, %(notes)s, %(status)s) RETURNING id",
+                "%(seller_store_ref_id)s, %(amount)s, %(currency)s, %(provides_shipping)s, %(notes)s, %(status)s) RETURNING id, business_code",
                 {"business_code": business_code, "purchase_request_id": offer.purchase_request_id,
                  "seller_store_ref_id": offer.seller_store_ref_id, "amount": offer.amount,
                  "currency": offer.currency, "provides_shipping": offer.provides_shipping,
                  "notes": offer.notes, "status": offer.status},
             )
-            offer.id = cur.fetchone()["id"]
+            row = cur.fetchone()
+            offer.id = row["id"]
+            offer.business_code = row["business_code"]
         return offer
 
     def get_offers_for_purchase_request(self, pr_id: str) -> List[Offer]:
@@ -109,7 +113,7 @@ class PostgresOrderRepository(OrderRepository):
         with self._connection.cursor() as cur:
             cur.execute(
                 "SELECT id, purchase_request_id, seller_store_ref_id, amount, currency, provides_shipping, "
-                "notes, status FROM pur.offers WHERE purchase_request_id = %(pr_id)s",
+                "notes, status, business_code FROM pur.offers WHERE purchase_request_id = %(pr_id)s",
                 {"pr_id": pr_id},
             )
             rows = cur.fetchall()
@@ -120,7 +124,7 @@ class PostgresOrderRepository(OrderRepository):
         with self._connection.cursor() as cur:
             cur.execute(
                 "SELECT id, purchase_request_id, seller_store_ref_id, amount, currency, provides_shipping, "
-                "notes, status FROM pur.offers WHERE id = %(id)s",
+                "notes, status, business_code FROM pur.offers WHERE id = %(id)s",
                 {"id": offer_id},
             )
             row = cur.fetchone()
@@ -130,7 +134,8 @@ class PostgresOrderRepository(OrderRepository):
     def _row_to_offer(row) -> Offer:
         return Offer(id=row["id"], purchase_request_id=row["purchase_request_id"],
                       seller_store_ref_id=row["seller_store_ref_id"], amount=row["amount"], currency=row["currency"],
-                      provides_shipping=row["provides_shipping"], notes=row["notes"], status=row["status"])
+                      provides_shipping=row["provides_shipping"], notes=row["notes"], status=row["status"],
+                      business_code=row["business_code"])
 
     def update_offer(self, offer: Offer) -> Offer:
         with self._connection:
@@ -152,6 +157,7 @@ class InMemoryOrderRepository(OrderRepository):
 
     def insert_purchase_request(self, pr: PurchaseRequest) -> PurchaseRequest:
         pr.id = f"pr-{self._seq['pr']}"
+        pr.business_code = f"PR-{uuid.uuid4().hex[:29]}"
         self._seq["pr"] += 1
         self._prs[pr.id] = pr
         return pr
@@ -165,6 +171,7 @@ class InMemoryOrderRepository(OrderRepository):
 
     def insert_offer(self, offer: Offer) -> Offer:
         offer.id = f"offer-{self._seq['offer']}"
+        offer.business_code = f"OF-{uuid.uuid4().hex[:29]}"
         self._seq["offer"] += 1
         self._offers[offer.id] = offer
         return offer
